@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glyph - Privacy Policy</title>
+<link rel="icon" type="image/png" href="glyph-favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --turquoise: #7FC4BB;
+  --bronze: #6B4F30;
+  --sand: #F6F1E7;
+  --ink: #241E15;
+  --muted: #7A7264;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Inter", -apple-system, sans-serif;
+  background: var(--sand);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+.display { font-family: "Fraunces", Georgia, serif; }
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 64px 6vw 96px;
+}
+a { color: var(--bronze); }
+.back {
+  display: inline-block;
+  margin-bottom: 32px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+.back:hover { color: var(--ink); }
+h1 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(28px, 4vw, 38px);
+  margin-bottom: 8px;
+}
+.updated {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 40px;
+}
+h2 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 500;
+  font-size: 20px;
+  margin-top: 36px;
+  margin-bottom: 10px;
+}
+p, li { color: var(--ink); font-size: 15.5px; }
+ul { padding-left: 22px; margin: 8px 0; }
+li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html">&larr; Back to Glyph</a>
+  <h1 class="display">Privacy Policy</h1>
+  <p class="updated">Last updated: 27 August 2026</p>
+
+  <p>Glyph is a Chrome extension that identifies the font used in text on a webpage. This page explains what data Glyph accesses, stores, and sends, and why.</p>
+
+  <h2>What Glyph accesses</h2>
+  <ul>
+    <li><strong>Page content, only when you start a tool.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, or use the keyboard shortcut. It does not run in the background or read pages automatically.</li>
+    <li><strong>Snip tool:</strong> captures a screenshot of the region you select, so the image can be sent to a font-identification API.</li>
+    <li><strong>Highlight tool:</strong> reads the computed CSS (font family, weight, size) of the element you click. This never leaves your device — it's shown directly in the result card.</li>
+  </ul>
+
+  <h2>What Glyph stores</h2>
+  <p>Glyph stores the following locally on your device using Chrome's <code>storage</code> API. None of this is synced to any account or server we control:</p>
+  <ul>
+    <li>Your font-identification API key, if you choose to add one</li>
+    <li>Your light/dark theme preference</li>
+    <li>Your keyboard shortcut setting</li>
+  </ul>
+
+  <h2>What Glyph sends, and to whom</h2>
+  <p>When you use the Snip tool, the captured image is sent along with your API key to the font-identification service to return a match. This is the only data Glyph transmits off your device, and it only happens when you actively use the Snip tool. Glyph does not sell, share, or use your data for advertising, and does not track your browsing activity.</p>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><strong>activeTab</strong> — lets Glyph run its tools in the tab you're viewing, only after you click a button in the popup.</li>
+    <li><strong>scripting</strong> — lets Glyph inject the Snip/Highlight tool overlay into the page on demand.</li>
+    <li><strong>storage</strong> — lets Glyph save your settings locally, as described above.</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy can be raised via the <a href="https://github.com/h4l-git/Glyph">Glyph GitHub repository</a>.</p>
+</main>
+</body>
+</html>
