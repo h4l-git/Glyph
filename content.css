@@ -1,0 +1,55 @@
+.glyph-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.glyph-box {
+  position: fixed;
+  border: 1.5px solid #7FC4BB;
+  background: rgba(127, 196, 187, 0.12);
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+.glyph-hl-outline {
+  position: fixed;
+  border: 1.5px solid #7FC4BB;
+  background: rgba(127, 196, 187, 0.08);
+  z-index: 2147483646;
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.glyph-card {
+  position: fixed;
+  z-index: 2147483647;
+  background: #ffffff;
+  color: #1a1a18;
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 12px 36px 12px 14px;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 240px;
+}
+
+.glyph-card-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #9a9a94;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.glyph-card-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1a1a18;
+}

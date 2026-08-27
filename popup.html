@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Noto+Sans+Egyptian+Hieroglyphs&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="header">
+    <span class="logo-tile" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 60 52" fill="none">
+        <path d="M8 14 C16 6 30 4 42 8 C48 10 52 12.5 54 14" stroke="#6B4F30" stroke-width="4" stroke-linecap="square" fill="none"/>
+        <path d="M9 24 C17 17 26 14.5 33 15 C41 15.7 48 19 53 23 C48 26.5 41 29 33 29 C25 29 16 27.5 9 24 Z" stroke="#6B4F30" stroke-width="3.8" stroke-linejoin="miter" fill="none"/>
+        <ellipse cx="30" cy="21.5" rx="6.6" ry="6" fill="#6B4F30"/>
+        <path d="M53 23 C56 21.5 58 20 59 18.5" stroke="#6B4F30" stroke-width="3.6" stroke-linecap="square" fill="none"/>
+        <path d="M13 26 C14.5 29.5 14.8 33 13 36.5 L9 44 C13.5 40 17 34.5 17.8 28.8" stroke="#6B4F30" stroke-width="3.2" stroke-linejoin="miter" fill="#6B4F30"/>
+        <path d="M22 28.2 C27 36.5 33.5 42.5 40 44.5 C44 45.5 47 44.5 48 42 C49 39.5 47.5 37 45 36.5 C43 36.1 41.3 37.2 41 39 C40.8 40.4 41.8 41.6 43.2 41.7" stroke="#6B4F30" stroke-width="3.6" stroke-linecap="square" fill="none"/>
+      </svg>
+    </span>
+    <span class="wordmark" aria-label="Glyph">
+      <span class="latin-row" aria-hidden="true"><span>G</span><span>l</span><span>y</span><span>p</span><span>h</span></span>
+      <span class="hiero-row" aria-hidden="true"><span>&#x133BC;</span><span>&#x130ED;</span><span>&#x131CC;</span><span>&#x132AA;</span><span>&#x13254;</span></span>
+    </span>
+    <span class="header-spacer"></span>
+    <button class="theme-toggle" id="btn-theme" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+  </header>
+
+  <nav class="menu" id="menu-main">
+    <button class="item" id="btn-snip">
+      <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 5v10a1 1 0 0 0 1 1h10"/><path d="M5 8h10a1 1 0 0 1 1 1v10"/>
+      </svg>
+      <span class="item-text">
+        <span class="item-title">Snip tool</span>
+        <span class="item-sub">Capture a region to identify</span>
+      </span>
+    </button>
+
+    <button class="item" id="btn-highlight">
+      <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12.5 5.5 18.5 11.5 8 22H2v-6z"/><path d="M16 2l6 6"/>
+      </svg>
+      <span class="item-text">
+        <span class="item-title">Highlight tool</span>
+        <span class="item-sub">Select text on the page</span>
+      </span>
+    </button>
+
+    <div class="divider" role="separator"></div>
+
+    <button class="item item-plain" id="btn-website">
+      <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 3h7v7"/><path d="M21 3 11 13"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+      </svg>
+      <span class="item-title">About</span>
+    </button>
+
+    <button class="item item-plain" id="btn-settings">
+      <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span class="item-title">Settings</span>
+    </button>
+  </nav>
+
+  <section class="settings hidden" id="panel-settings">
+    <button class="back" id="btn-back">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      Back
+    </button>
+    <label class="field-label" for="api-key">API key</label>
+    <input type="password" id="api-key" placeholder="sk-..." autocomplete="off" />
+    <p class="field-hint">Stored locally on this device.</p>
+    <button class="save" id="btn-save">Save</button>
+    <p class="save-note hidden" id="save-note">Saved</p>
+
+    <div class="divider" role="separator" style="margin: 16px 0 14px;"></div>
+
+    <label class="field-label">Snip tool shortcut</label>
+    <div class="shortcut-row">
+      <span class="shortcut-key" id="shortcut-display">&hellip;</span>
+      <button class="shortcut-change" id="btn-shortcut">Change</button>
+    </div>
+    <p class="field-hint">Opens Chrome's shortcut settings.</p>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
