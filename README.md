@@ -1,6 +1,6 @@
 # Glyph
 
-Find any font, instantly. Glyph is a Chrome extension that lets you snip or highlight text on any webpage to identify its typeface.
+Find any font, instantly. Glyph is a Chrome extension that lets you snip or highlight text on any webpage to identify its typeface, powered by Claude.
 
 ## Features
 
@@ -52,3 +52,7 @@ Open **Settings** from the popup menu to:
 ## Development
 
 This is a plain HTML/CSS/JS extension with no build step. Edit the files directly, then reload the extension from `chrome://extensions` to see your changes.
+
+## Landing page
+
+The `docs/` folder holds the project's landing page, served via GitHub Pages.
