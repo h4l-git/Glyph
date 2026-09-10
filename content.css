@@ -12,6 +12,7 @@
   background: rgba(127, 196, 187, 0.12);
   z-index: 2147483647;
   pointer-events: none;
+  border-radius: 6px;
 }
 
 .glyph-hl-outline {
@@ -20,28 +21,72 @@
   background: rgba(127, 196, 187, 0.08);
   z-index: 2147483646;
   pointer-events: none;
-  border-radius: 2px;
+  border-radius: 6px;
 }
 
+/* Result card: matches the popup's light (cream) and dark palettes. */
 .glyph-card {
   position: fixed;
   z-index: 2147483647;
-  background: #ffffff;
+  background: #efe4cf;
   color: #1a1a18;
   border: 0.5px solid rgba(0, 0, 0, 0.1);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 12px 36px 12px 14px;
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  max-width: 240px;
+  max-width: 260px;
+  overflow: visible;
+}
+.glyph-card--has-gfonts {
+  padding-right: 56px;
+}
+
+.glyph-card--dark {
+  background: #1f1f1d;
+  color: #ececea;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.glyph-card--dark .glyph-swatch { border-color: rgba(255, 255, 255, 0.2); }
+.glyph-card--dark .glyph-card-close,
+.glyph-card--dark .glyph-card-gfonts { color: #7c7c76; }
+.glyph-card--dark .glyph-card-close:hover { background: rgba(255, 255, 255, 0.06); color: #ececea; }
+.glyph-card--dark .glyph-card-gfonts:hover,
+.glyph-card--dark .glyph-card-gfonts:focus-visible {
+  background: #7FC4BB;
+  color: #1a1a18;
+}
+.glyph-card--dark .glyph-prop:hover { background: rgba(127, 196, 187, 0.16); }
+.glyph-card--dark .glyph-card-copy {
+  background: #2a2a27;
+  color: #ececea;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.glyph-card--dark .glyph-card-copy:hover,
+.glyph-card--dark .glyph-card-copy--done {
+  background: #7FC4BB;
+  color: #1a1a18;
+}
+
+.glyph-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  vertical-align: -1px;
 }
 
 .glyph-card-close {
   position: absolute;
-  top: 6px;
+  top: 50%;
   right: 6px;
   width: 20px;
   height: 20px;
+  transform: translateY(-50%);
   border: none;
   background: transparent;
   color: #9a9a94;
@@ -52,4 +97,148 @@
 .glyph-card-close:hover {
   background: rgba(0, 0, 0, 0.05);
   color: #1a1a18;
+}
+
+.glyph-card-gfonts {
+  position: absolute;
+  top: 50%;
+  right: 28px;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #9a9a94;
+  text-decoration: none;
+  cursor: pointer;
+}
+.glyph-card-gfonts:hover,
+.glyph-card-gfonts:focus-visible {
+  background: rgba(127, 196, 187, 0.28);
+  color: #1a1a18;
+}
+.glyph-card-gfonts:focus-visible { outline: 2px solid #7FC4BB; outline-offset: 1px; }
+.glyph-card-gfonts svg { display: block; }
+
+.glyph-prop {
+  position: relative;
+  display: inline-block;
+  vertical-align: baseline;
+  border-radius: 3px;
+  padding: 0 1px;
+  margin: 0 -1px;
+  cursor: pointer;
+  user-select: none;
+}
+.glyph-prop:hover { background: rgba(127, 196, 187, 0.22); }
+
+.glyph-style-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: 1px;
+  pointer-events: none;
+}
+.glyph-style-mark {
+  display: inline-block;
+  min-width: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(107, 79, 48, 0.1);
+  color: #6B4F30;
+  user-select: none;
+  cursor: default;
+  pointer-events: none;
+}
+.glyph-style-mark--italic { font-style: italic; font-weight: 600; }
+.glyph-style-mark--underline {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 1px;
+}
+.glyph-card--dark .glyph-style-mark {
+  background: rgba(127, 196, 187, 0.16);
+  color: #7FC4BB;
+}
+
+.glyph-card-copy {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #efe4cf;
+  color: #1a1a18;
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.12s ease;
+}
+.glyph-card-copy::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 8px;
+}
+.glyph-prop:hover .glyph-card-copy,
+.glyph-card-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.glyph-card-copy:hover,
+.glyph-card-copy--done {
+  background: #7FC4BB;
+  color: #1a1a18;
+}
+.glyph-card-copy:focus-visible { outline: 2px solid #7FC4BB; outline-offset: 1px; }
+.glyph-card-copy svg { display: block; }
+
+.glyph-card--copy-below .glyph-card-copy {
+  bottom: auto;
+  top: calc(100% + 4px);
+}
+.glyph-card--copy-below .glyph-card-copy::after {
+  top: auto;
+  bottom: 100%;
+}
+
+/* ---------- Custom cursors ----------
+   32px SVGs embedded inline so nothing needs to be web-accessible.
+   Snip: Eye of Horus crosshair, hotspot at the pupil.
+   Highlight: brush, hotspot at the tip of the bristles. Keyword fallbacks follow. */
+.glyph-overlay {
+  cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E %3Cg fill=%22none%22 stroke=%22%23FFFFFF%22 stroke-opacity=%220.9%22 stroke-width=%223%22 stroke-linecap=%22round%22%3E %3Cpath d=%22M16 4v4.5M16 23.5v4.5M1.5 16h3M27.5 16h3%22/%3E %3Cpath d=%22M8 16C11.5 11 20.5 11 24 16C20.5 21 11.5 21 8 16Z%22/%3E %3C/g%3E %3Cpath d=%22M16 4v4.5M16 23.5v4.5M1.5 16h3M27.5 16h3%22 fill=%22none%22 stroke=%22%237FC4BB%22 stroke-width=%221.4%22 stroke-linecap=%22round%22/%3E %3Cpath d=%22M8 16C11.5 11 20.5 11 24 16C20.5 21 11.5 21 8 16Z%22 fill=%22none%22 stroke=%22%236B4F30%22 stroke-width=%221.4%22 stroke-linejoin=%22round%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.6%22 fill=%22%236B4F30%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%221%22 fill=%22%237FC4BB%22/%3E %3C/svg%3E") 16 16, crosshair;
+}
+html.glyph-hl-mode,
+html.glyph-hl-mode * {
+  cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2232%22 height=%2232%22 viewBox=%220 0 32 32%22%3E %3Cg transform=%22translate%2816 16%29 rotate%2845%29%22%3E %3Cg stroke=%22%23FFFFFF%22 stroke-opacity=%220.9%22 stroke-width=%222.6%22 stroke-linejoin=%22round%22 fill=%22%23FFFFFF%22%3E %3Cpath d=%22M-1.6 -19h3.2v16h-3.2z%22/%3E%3Cpath d=%22M-2.2 -3.5h4.4v4h-4.4z%22/%3E%3Cpath d=%22M-2.2 0.5C-3 6 -1.5 13 0 19C1.5 13 3 6 2.2 0.5Z%22/%3E %3C/g%3E %3Cpath d=%22M-1.6 -19h3.2v16h-3.2z%22 fill=%22%236B4F30%22/%3E %3Cpath d=%22M-2.2 -3.5h4.4v4h-4.4z%22 fill=%22%23EFE4CF%22 stroke=%22%236B4F30%22 stroke-width=%220.8%22/%3E %3Cpath d=%22M-2.2 0.5C-3 6 -1.5 13 0 19C1.5 13 3 6 2.2 0.5Z%22 fill=%22%237FC4BB%22 stroke=%22%236B4F30%22 stroke-width=%220.8%22 stroke-linejoin=%22round%22/%3E %3Cpath d=%22M0 3v11%22 stroke=%22%236B4F30%22 stroke-opacity=%220.35%22 stroke-width=%220.6%22 stroke-linecap=%22round%22/%3E %3C/g%3E %3C/svg%3E") 3 29, crosshair !important;
+}
+html.glyph-hl-mode .glyph-card,
+html.glyph-hl-mode .glyph-card * {
+  cursor: default !important;
+}
+html.glyph-hl-mode .glyph-prop,
+html.glyph-hl-mode .glyph-card-copy,
+html.glyph-hl-mode .glyph-card-close,
+html.glyph-hl-mode .glyph-card-gfonts {
+  cursor: pointer !important;
 }

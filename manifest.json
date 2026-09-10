@@ -1,10 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Glyph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Find any font, instantly. Snip or highlight text on any page to identify its typeface.",
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -18,14 +17,41 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://fonts.googleapis.com/*",
+    "https://api.fontsource.org/*",
+    "https://api.fontshare.com/*",
+    "https://fonts.adobe.com/*",
+    "https://www.fontsquirrel.com/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "commands": {
     "start-snip": {
-      "suggested_key": { "default": "Alt+Shift+G" },
+      "suggested_key": {
+        "default": "Alt+Shift+G"
+      },
       "description": "Start snip tool"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

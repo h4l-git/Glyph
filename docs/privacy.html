@@ -26,6 +26,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .display { font-family: "Fraunces", Georgia, serif; }
+h1, h2, h3 { font-family: "Fraunces", Georgia, serif; }
 main {
   max-width: 720px;
   margin: 0 auto;
@@ -67,15 +68,16 @@ li { margin-bottom: 6px; }
 <main>
   <a class="back" href="index.html">&larr; Back to Glyph</a>
   <h1 class="display">Privacy Policy</h1>
-  <p class="updated">Last updated: 27 August 2026</p>
+  <p class="updated">Last updated: 10 September 2026</p>
 
   <p>Glyph is a Chrome extension that identifies the font used in text on a webpage. This page explains what data Glyph accesses, stores, and sends, and why.</p>
 
   <h2>What Glyph accesses</h2>
   <ul>
-    <li><strong>Page content, only when you start a tool.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, or use the keyboard shortcut. It does not run in the background or read pages automatically.</li>
+    <li><strong>Page content, only when you start a tool or enable text selection.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, use the keyboard shortcut, or turn on "Show card on text selection" in Settings. With that setting off, it does not run in the background or read pages automatically.</li>
     <li><strong>Snip tool:</strong> captures a screenshot of the region you select, so the image can be sent to a font-identification API.</li>
     <li><strong>Highlight tool:</strong> reads the computed CSS (font family, weight, size) of the element you click. This never leaves your device — it's shown directly in the result card.</li>
+    <li><strong>Text selection (optional):</strong> if you enable it in Settings, Glyph reads the computed CSS of text you highlight with your cursor and shows the same result card. Chrome will ask for permission to run on websites you visit. You can turn this off at any time.</li>
   </ul>
 
   <h2>What Glyph stores</h2>
@@ -84,16 +86,29 @@ li { margin-bottom: 6px; }
     <li>Your font-identification API key, if you choose to add one</li>
     <li>Your light/dark theme preference</li>
     <li>Your keyboard shortcut setting</li>
+    <li>Whether "Show card on text selection" is enabled</li>
+    <li>A short local cache of font-source lookups (family name → official page URL) and catalog indexes, used only to resolve download/specimen links</li>
   </ul>
 
   <h2>What Glyph sends, and to whom</h2>
-  <p>When you use the Snip tool, the captured image is sent along with your API key to the font-identification service to return a match. This is the only data Glyph transmits off your device, and it only happens when you actively use the Snip tool. Glyph does not sell, share, or use your data for advertising, and does not track your browsing activity.</p>
+  <p>When you use the Snip tool, the captured image is sent along with your API key to the font-identification service to return a match. This only happens when you actively use the Snip tool. When you open a font preview in History, Glyph may also load that typeface from Google Fonts (their official stylesheet) so it can show a live text sample; installed and generic fonts are rendered locally and nothing is fetched.</p>
+  <p>When Glyph shows a result, it may also query public font catalogs to find an official specimen or download page for the identified family. Those requests send only the font family name — not the page you were viewing, screenshots, or other browsing data. Glyph may contact:</p>
+  <ul>
+    <li><strong>Google Fonts</strong> (<code>fonts.googleapis.com</code>) — to check whether the family is listed there</li>
+    <li><strong>Fontsource</strong> (<code>api.fontsource.org</code>) — to look up an official Fontsource page</li>
+    <li><strong>Fontshare</strong> (<code>api.fontshare.com</code>) — to match the family against Fontshare's catalog</li>
+    <li><strong>Adobe Fonts</strong> (<code>fonts.adobe.com</code>) — to check for an official Adobe Fonts page</li>
+    <li><strong>Font Squirrel</strong> (<code>www.fontsquirrel.com</code>) — to check for an official Font Squirrel page</li>
+  </ul>
+  <p>If no official page is found, Glyph hides the link. Glyph does not sell, share, or use your data for advertising, and does not track your browsing activity.</p>
 
   <h2>Permissions</h2>
   <ul>
     <li><strong>activeTab</strong> — lets Glyph run its tools in the tab you're viewing, only after you click a button in the popup.</li>
     <li><strong>scripting</strong> — lets Glyph inject the Snip/Highlight tool overlay into the page on demand.</li>
-    <li><strong>storage</strong> — lets Glyph save your settings locally, as described above.</li>
+    <li><strong>storage</strong> — lets Glyph save your settings and the font-source cache locally, as described above.</li>
+    <li><strong>Access to font catalog sites</strong> — lets Glyph resolve an official page for an identified font, as described above.</li>
+    <li><strong>Optional access to websites</strong> — requested only if you enable "Show card on text selection", so Glyph can identify fonts when you highlight text.</li>
   </ul>
 
   <h2>Contact</h2>

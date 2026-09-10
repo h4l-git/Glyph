@@ -21,7 +21,7 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 
 1. Click the Glyph icon in your toolbar.
 2. Choose **Snip tool** to drag-select a region of the page, or **Highlight tool** to click directly on text.
-3. Press `Esc` at any time to cancel the active tool.
+3. The tool stays active after each result so you can check several fonts in a row. Right-click or press `Esc` to finish.
 4. Results appear in a small card on the page, with the identified font (Snip) or the live computed font details (Highlight).
 
 > Note: Glyph can't run on Chrome's internal pages (`chrome://`, the New Tab page, the Web Store, etc.) — this is a browser-level restriction on all extensions, not something Glyph can override. Use it on any regular `http(s)://` page instead.
@@ -38,7 +38,9 @@ Open **Settings** from the popup menu to:
 | File | Purpose |
 |---|---|
 | `manifest.json` | Extension manifest (Manifest V3) |
-| `popup.html` / `popup.css` / `popup.js` | Toolbar popup UI, settings panel, theme toggle |
+| `popup.html` / `popup.css` / `popup.js` | Popup UI, settings panel, theme toggle |
+| `panel.js` | Injected on toolbar click; shows `popup.html` in a transparent, rounded in-page iframe with a drag-to-resize grip (double-click the grip to reset) |
+| `unavailable.html` / `unavailable.css` / `unavailable.js` | Small native popup shown on pages Chrome won't let extensions run on (New Tab, `chrome://`, Web Store) |
 | `content.js` / `content.css` | Injected into the page to run the Snip and Highlight tools |
 | `background.js` | Service worker — handles screenshot capture, keyboard shortcut, and the mode badge |
 | `icons/` | Toolbar and store icons |
@@ -46,7 +48,7 @@ Open **Settings** from the popup menu to:
 ## Permissions
 
 - `activeTab` — required to inject the Snip/Highlight tools into the page you're currently viewing.
-- `scripting` — required to run `content.js` and `content.css` on demand.
+- `scripting` — required to run `panel.js`, `content.js` and `content.css` on demand.
 - `storage` — required to save your API key, theme preference, and keyboard shortcut locally.
 
 ## Development
@@ -56,3 +58,7 @@ This is a plain HTML/CSS/JS extension with no build step. Edit the files directl
 ## Landing page
 
 The `docs/` folder holds the project's landing page, served via GitHub Pages.
+
+## License
+
+[MIT](LICENSE)
