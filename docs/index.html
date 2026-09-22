@@ -451,7 +451,11 @@ html.is-loading { overflow: hidden; }
   var loader = document.getElementById("loader");
   if (!loader) return;
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var playStarted = 0;
+  var shownAt = 0;
+  var fontsSettled = false;
+  var pageReady = false;
+  var scheduled = false;
+  var closing = false;
 
   function whenFonts() {
     return new Promise(function (resolve) {
@@ -494,6 +498,8 @@ html.is-loading { overflow: hidden; }
   }
 
   function dismiss() {
+    if (closing) return;
+    closing = true;
     loader.classList.add("is-done");
     document.documentElement.classList.remove("is-loading");
     var removed = false;
@@ -506,17 +512,34 @@ html.is-loading { overflow: hidden; }
     setTimeout(remove, 700);
   }
 
-  whenFonts().then(function (ok) {
-    if (ok && !reduceMotion) {
-      loader.classList.add("loader-play");
-      playStarted = Date.now();
-    }
-    return whenPage().then(function () {
-      var hold = 600;
-      if (ok && !reduceMotion) hold = Math.max(0, 1500 - (Date.now() - playStarted));
-      return new Promise(function (resolve) { setTimeout(resolve, hold); });
+  function tryDismiss() {
+    if (scheduled || !shownAt || !fontsSettled || !pageReady) return;
+    scheduled = true;
+    var minSeen = reduceMotion ? 200 : 1600;
+    var wait = Math.max(0, minSeen - (Date.now() - shownAt));
+    setTimeout(dismiss, wait);
+  }
+
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      shownAt = Date.now();
+      tryDismiss();
     });
-  }).then(dismiss);
+  });
+
+  whenFonts().then(function (ok) {
+    if (ok && !reduceMotion) loader.classList.add("loader-play");
+    fontsSettled = true;
+    tryDismiss();
+  });
+  whenPage().then(function () {
+    pageReady = true;
+    tryDismiss();
+  });
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
 })();
 </script>
 
