@@ -78,23 +78,23 @@ nav {
   font-size: 0.56em;
   color: var(--bronze);
 }
-.latin-row span { animation: toHiero 28s ease-in-out infinite; }
-.hiero-row span { opacity: 0; animation: toLatin 28s ease-in-out infinite; }
+.latin-row span { animation: toHiero 48s linear infinite; }
+.hiero-row span { opacity: 0; animation: toLatin 48s linear infinite; }
 .latin-row span:nth-child(1), .hiero-row span:nth-child(1) { animation-delay: 0s; }
-.latin-row span:nth-child(2), .hiero-row span:nth-child(2) { animation-delay: 0.8s; }
-.latin-row span:nth-child(3), .hiero-row span:nth-child(3) { animation-delay: 1.6s; }
-.latin-row span:nth-child(4), .hiero-row span:nth-child(4) { animation-delay: 2.4s; }
-.latin-row span:nth-child(5), .hiero-row span:nth-child(5) { animation-delay: 3.2s; }
+.latin-row span:nth-child(2), .hiero-row span:nth-child(2) { animation-delay: 1.4s; }
+.latin-row span:nth-child(3), .hiero-row span:nth-child(3) { animation-delay: 2.8s; }
+.latin-row span:nth-child(4), .hiero-row span:nth-child(4) { animation-delay: 4.2s; }
+.latin-row span:nth-child(5), .hiero-row span:nth-child(5) { animation-delay: 5.6s; }
 
 @keyframes toHiero {
-  0%, 52% { opacity: 1; }
-  64%, 82% { opacity: 0; }
-  94%, 100% { opacity: 1; }
+  0%, 22% { opacity: 1; }
+  48%, 62% { opacity: 0; }
+  88%, 100% { opacity: 1; }
 }
 @keyframes toLatin {
-  0%, 52% { opacity: 0; }
-  64%, 82% { opacity: 1; }
-  94%, 100% { opacity: 0; }
+  0%, 22% { opacity: 0; }
+  48%, 62% { opacity: 1; }
+  88%, 100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .latin-row span { animation: none; }
