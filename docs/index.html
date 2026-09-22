@@ -42,13 +42,24 @@ nav {
   margin: 0 auto;
 }
 .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 22px; }
-.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
-.brand-tag { font-size: 11px; color: var(--muted); font-weight: 400; font-family: "Inter", sans-serif; }
-
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: max-content;
+  line-height: 1.15;
+}
+.brand-tag {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  font-family: "Inter", sans-serif;
+  white-space: nowrap;
+}
 .wordmark {
   position: relative;
   display: inline-block;
-  width: 5.1em;
+  width: 4.3em;
   line-height: 1;
 }
 .latin-row, .hiero-row {
@@ -64,7 +75,7 @@ nav {
   top: 50%;
   transform: translateY(-50%);
   font-family: "Noto Sans Egyptian Hieroglyphs", serif;
-  font-size: 0.66em;
+  font-size: 0.56em;
   color: var(--bronze);
 }
 .latin-row span { animation: toHiero 14s ease-in-out infinite; }
