@@ -45,19 +45,26 @@ nav {
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-tag { font-size: 11px; color: var(--muted); font-weight: 400; font-family: "Inter", sans-serif; }
 
-.wordmark { position: relative; display: inline-block; }
-.latin-row, .hiero-row { display: inline-flex; }
+.wordmark {
+  position: relative;
+  display: inline-block;
+  width: 6.4em;
+  line-height: 1;
+}
+.latin-row, .hiero-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  width: 100%;
+  align-items: center;
+  justify-items: center;
+}
 .hiero-row {
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 0.28em;
-  white-space: nowrap;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: "Noto Sans Egyptian Hieroglyphs", serif;
-  font-size: 0.78em;
+  font-size: 0.82em;
   color: var(--bronze);
 }
 .latin-row span { animation: toHiero 7s ease-in-out infinite; }
@@ -367,7 +374,7 @@ html.is-loading { overflow: hidden; }
 <header class="hero">
   <div>
     <h1>See a font.<br /><em>Know</em> the font.</h1>
-    <p class="hero-sub">Glyph identifies any typeface on any page. Snip it from an image or point at live text — the answer appears in seconds.</p>
+    <p class="hero-sub">Glyph identifies any typeface on any page. Snip it from an image or point at live text - the answer appears in seconds.</p>
     <div class="cta-row" id="install">
       <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/glyph/ibioikhlalicigjadkpjfcjhdlkeegnj">Add to Chrome</a>
     </div>
@@ -396,7 +403,7 @@ html.is-loading { overflow: hidden; }
           </svg>
         </div>
         <h3>Snip tool</h3>
-        <p>For text trapped in images, screenshots, and posters. Drag a box around it — Glyph reads the letterforms with AI and names the typeface.</p>
+        <p>For text trapped in images, screenshots, and posters. Drag a box around it - Glyph reads the letterforms with AI and names the typeface.</p>
       </div>
       <div class="tool-card">
         <div class="icon" aria-hidden="true">
