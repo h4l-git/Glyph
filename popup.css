@@ -131,41 +131,44 @@ html[data-panel-fill] .hidden { display: none; }
 .wordmark {
   position: relative;
   display: inline-block;
+  width: 4.3em;
   font-family: "Fraunces", Georgia, serif;
   font-weight: 500;
   font-size: 16px;
-  letter-spacing: 0.01em;
+  line-height: 1;
 }
-.latin-row, .hiero-row { display: inline-flex; }
+.latin-row, .hiero-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  width: 100%;
+  align-items: center;
+  justify-items: center;
+}
 .hiero-row {
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 0.28em;
-  white-space: nowrap;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: "Noto Sans Egyptian Hieroglyphs", serif;
-  font-size: 0.78em;
+  font-size: 0.56em;
   color: var(--hiero);
 }
-.latin-row span { animation: toHiero 7s ease-in-out infinite; }
-.hiero-row span { opacity: 0; animation: toLatin 7s ease-in-out infinite; }
+.latin-row span { animation: toHiero 3s ease-in-out infinite; }
+.hiero-row span { opacity: 0; animation: toLatin 3s ease-in-out infinite; }
 .latin-row span:nth-child(1), .hiero-row span:nth-child(1) { animation-delay: 0s; }
-.latin-row span:nth-child(2), .hiero-row span:nth-child(2) { animation-delay: 0.35s; }
-.latin-row span:nth-child(3), .hiero-row span:nth-child(3) { animation-delay: 0.7s; }
-.latin-row span:nth-child(4), .hiero-row span:nth-child(4) { animation-delay: 1.05s; }
-.latin-row span:nth-child(5), .hiero-row span:nth-child(5) { animation-delay: 1.4s; }
+.latin-row span:nth-child(2), .hiero-row span:nth-child(2) { animation-delay: 0.09s; }
+.latin-row span:nth-child(3), .hiero-row span:nth-child(3) { animation-delay: 0.17s; }
+.latin-row span:nth-child(4), .hiero-row span:nth-child(4) { animation-delay: 0.26s; }
+.latin-row span:nth-child(5), .hiero-row span:nth-child(5) { animation-delay: 0.34s; }
 
 @keyframes toHiero {
-  0%, 38% { opacity: 1; }
-  50%, 82% { opacity: 0; }
+  0%, 52% { opacity: 1; }
+  64%, 82% { opacity: 0; }
   94%, 100% { opacity: 1; }
 }
 @keyframes toLatin {
-  0%, 38% { opacity: 0; }
-  50%, 82% { opacity: 1; }
+  0%, 52% { opacity: 0; }
+  64%, 82% { opacity: 1; }
   94%, 100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
