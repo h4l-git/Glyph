@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="is-loading">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,7 +8,8 @@
 <link rel="icon" type="image/png" href="glyph-favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500&family=Noto+Sans+Egyptian+Hieroglyphs&display=swap" rel="stylesheet">
+<link id="glyph-fonts" rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500&family=Noto+Sans+Egyptian+Hieroglyphs&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500&family=Noto+Sans+Egyptian+Hieroglyphs&display=swap"></noscript>
 <style>
 :root {
   --turquoise: #7FC4BB;
@@ -241,9 +242,102 @@ footer .display { font-size: 15px; color: var(--ink); }
   html { scroll-behavior: auto; }
   .btn { transition: none; }
 }
+
+html.is-loading { overflow: hidden; }
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sand);
+  transition: opacity 0.45s ease, visibility 0.45s ease;
+}
+#loader.is-done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.loader-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.loader-wordmark {
+  position: relative;
+  width: min(6.4em, 92vw);
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(52px, 8.5vw, 92px);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+}
+.loader-latin,
+.loader-hiero {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  width: 100%;
+  align-items: center;
+  justify-items: center;
+}
+.loader-hiero {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: "Noto Sans Egyptian Hieroglyphs", serif;
+  font-weight: 400;
+  font-size: 0.82em;
+  color: var(--bronze);
+}
+.loader-hiero span { opacity: 0; }
+#loader.loader-play .loader-latin span { animation: loaderToHiero 2.6s ease-in-out infinite; }
+#loader.loader-play .loader-hiero span { animation: loaderToLatin 2.6s ease-in-out infinite; }
+#loader.loader-play .loader-latin span:nth-child(1),
+#loader.loader-play .loader-hiero span:nth-child(1) { animation-delay: 0s; }
+#loader.loader-play .loader-latin span:nth-child(2),
+#loader.loader-play .loader-hiero span:nth-child(2) { animation-delay: 0.14s; }
+#loader.loader-play .loader-latin span:nth-child(3),
+#loader.loader-play .loader-hiero span:nth-child(3) { animation-delay: 0.28s; }
+#loader.loader-play .loader-latin span:nth-child(4),
+#loader.loader-play .loader-hiero span:nth-child(4) { animation-delay: 0.42s; }
+#loader.loader-play .loader-latin span:nth-child(5),
+#loader.loader-play .loader-hiero span:nth-child(5) { animation-delay: 0.56s; }
+@keyframes loaderToHiero {
+  0%, 20% { opacity: 1; }
+  36%, 70% { opacity: 0; }
+  86%, 100% { opacity: 1; }
+}
+@keyframes loaderToLatin {
+  0%, 20% { opacity: 0; }
+  36%, 70% { opacity: 1; }
+  86%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #loader { transition: none; }
+  #loader.loader-play .loader-latin span,
+  #loader.loader-play .loader-hiero span { animation: none; }
+  #loader.loader-play .loader-hiero span { opacity: 0; }
+}
 </style>
 </head>
 <body>
+
+<div id="loader" role="status" aria-live="polite">
+  <span class="loader-sr">Loading</span>
+  <span class="loader-wordmark" aria-hidden="true">
+    <span class="loader-latin"><span>G</span><span>l</span><span>y</span><span>p</span><span>h</span></span>
+    <span class="loader-hiero"><span>&#x133BC;</span><span>&#x130ED;</span><span>&#x131CC;</span><span>&#x132AA;</span><span>&#x13254;</span></span>
+  </span>
+</div>
+<noscript><style>html.is-loading{overflow:auto}#loader{display:none!important}</style></noscript>
 
 <nav>
   <div class="nav-brand">
@@ -333,6 +427,80 @@ footer .display { font-size: 15px; color: var(--ink); }
     <a href="privacy.html" class="footer-link">Privacy</a>
   </div>
 </footer>
+
+<script>
+(function () {
+  var loader = document.getElementById("loader");
+  if (!loader) return;
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var playStarted = 0;
+
+  function whenFonts() {
+    return new Promise(function (resolve) {
+      var link = document.getElementById("glyph-fonts");
+      var settled = false;
+      function finish(ok) {
+        if (settled) return;
+        settled = true;
+        resolve(ok);
+      }
+      var cap = setTimeout(function () { finish(false); }, 4000);
+      function ready() {
+        var fonts = document.fonts;
+        var done = fonts && fonts.ready ? fonts.ready : Promise.resolve();
+        done.then(function () {
+          if (!fonts || !fonts.load) {
+            clearTimeout(cap);
+            finish(true);
+            return;
+          }
+          fonts.load('16px "Noto Sans Egyptian Hieroglyphs"').then(function () {
+            clearTimeout(cap);
+            finish(fonts.check('16px "Noto Sans Egyptian Hieroglyphs"'));
+          }).catch(function () {
+            clearTimeout(cap);
+            finish(false);
+          });
+        });
+      }
+      if (!link || link.media === "all") ready();
+      else link.addEventListener("load", function () { setTimeout(ready, 0); }, { once: true });
+    });
+  }
+
+  function whenPage() {
+    return new Promise(function (resolve) {
+      if (document.readyState === "complete") resolve();
+      else window.addEventListener("load", function () { resolve(); }, { once: true });
+    });
+  }
+
+  function dismiss() {
+    loader.classList.add("is-done");
+    document.documentElement.classList.remove("is-loading");
+    var removed = false;
+    function remove() {
+      if (removed) return;
+      removed = true;
+      loader.remove();
+    }
+    loader.addEventListener("transitionend", remove, { once: true });
+    setTimeout(remove, 700);
+  }
+
+  whenFonts().then(function (ok) {
+    if (ok && !reduceMotion) {
+      loader.classList.add("loader-play");
+      playStarted = Date.now();
+    }
+    return whenPage().then(function () {
+      var hold = 600;
+      if (ok && !reduceMotion) hold = Math.max(0, 1500 - (Date.now() - playStarted));
+      return new Promise(function (resolve) { setTimeout(resolve, hold); });
+    });
+  }).then(dismiss);
+})();
+</script>
 
 </body>
 </html>
