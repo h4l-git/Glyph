@@ -190,6 +190,7 @@
       iframe = document.createElement("iframe");
       iframe.src = chrome.runtime.getURL("popup.html");
       iframe.setAttribute("allowtransparency", "true");
+      iframe.setAttribute("allow", "clipboard-write");
       iframe.title = "Glyph";
 
       wrap.appendChild(iframe);

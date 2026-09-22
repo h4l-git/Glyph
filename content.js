@@ -193,7 +193,9 @@
       const result = await identifyFont(cropped, apiKey);
       const formatted = formatIdentifyResult(result);
       updateCard(formatted);
-      rememberResult(formatted, await compressPreview(cropped));
+      if (await historySavingEnabled()) {
+        rememberResult(formatted, await compressPreview(cropped));
+      }
     } catch (err) {
       updateCard("Identification failed. Check your API key and try again.");
     }
@@ -788,7 +790,17 @@
   }
 
   const HISTORY_KEY = "fontHistory";
+  const SAVE_HISTORY_KEY = "saveFontHistory";
   const HISTORY_LIMIT = 10;
+
+  async function historySavingEnabled() {
+    try {
+      const data = await chrome.storage.local.get(SAVE_HISTORY_KEY);
+      return data[SAVE_HISTORY_KEY] !== false;
+    } catch (err) {
+      return true;
+    }
+  }
 
   function serializeProp(prop) {
     if (typeof prop === "string") return { value: prop };
@@ -806,6 +818,7 @@
 
   async function rememberResult(content, previewDataUrl) {
     if (!content || typeof content === "string") return;
+    if (!(await historySavingEnabled())) return;
     const properties = (Array.isArray(content) ? content : content.properties || []).map(serializeProp);
     if (!properties.length) return;
     const entry = {
@@ -837,6 +850,7 @@
   }
 
   async function rememberResultWithPreview(content, rect) {
+    if (!(await historySavingEnabled())) return;
     let preview = "";
     try {
       preview = await captureRegionPreview(rect);

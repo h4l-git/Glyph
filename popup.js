@@ -210,6 +210,7 @@ function makeHistoryProp(prop) {
 }
 
 const HISTORY_KEY = "fontHistory";
+const SAVE_HISTORY_KEY = "saveFontHistory";
 const HISTORY_LIMIT = 10;
 const SAVED_KEY = "savedFonts";
 const SOURCE_ICON =
@@ -222,6 +223,8 @@ const DELETE_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
 const PREVIEW_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const COPY_IMAGE_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="13" height="13" rx="2"/><circle cx="7.2" cy="9" r="1.2"/><path d="m3.8 15.2 3.2-3.2 2.6 2.6"/><rect x="9" y="8" width="12" height="12" rx="2"/></svg>';
 const GENERIC_FONT_FAMILIES = new Set([
   "serif", "sans-serif", "monospace", "cursive", "fantasy",
   "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace", "ui-rounded",
@@ -238,6 +241,7 @@ const btnFoldRecent = document.getElementById("btn-fold-recent");
 const FOLD_KEY = "historyFold";
 let historyEntries = [];
 let savedEntries = [];
+let saveHistory = true;
 let foldState = { saved: false, recent: false };
 let openPreviewId = null;
 
@@ -457,8 +461,7 @@ function makeHistoryCard(entry, options = {}) {
   saveBtn.addEventListener("click", () => toggleSave(entry));
   actions.appendChild(saveBtn);
   card.appendChild(actions);
-  if (actions.childElementCount === 2) card.classList.add("history-card--actions-2");
-  if (actions.childElementCount >= 3) card.classList.add("history-card--actions-3");
+  syncHistoryActionPadding(card);
 
   const family = fontNameFromEntry(entry);
   attachFontSourceLink(card, family);
@@ -514,10 +517,75 @@ async function toggleFold(section) {
   }
 }
 
+function syncHistoryActionPadding(card) {
+  const actions = card.querySelector(".history-actions");
+  const n = actions ? actions.querySelectorAll(":scope > .history-action").length : 0;
+  card.classList.toggle("history-card--actions-2", n === 2);
+  card.classList.toggle("history-card--actions-3", n >= 3);
+}
+
+function clearCopyImageButtons() {
+  document.querySelectorAll(".history-copy-image").forEach((btn) => btn.remove());
+}
+
+function pngBlobFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 1;
+      canvas.height = img.naturalHeight || img.height || 1;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("png"))), "image/png");
+    };
+    img.onerror = () => reject(new Error("image"));
+    img.src = dataUrl;
+  });
+}
+
+async function copyPreviewImage(dataUrl) {
+  if (!dataUrl || !navigator.clipboard?.write || typeof ClipboardItem !== "function") return false;
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": pngBlobFromDataUrl(dataUrl) }),
+    ]);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function makeCopyImageButton(dataUrl) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "history-action history-copy-image";
+  btn.title = "Copy image";
+  btn.setAttribute("aria-label", "Copy image");
+  btn.innerHTML = COPY_IMAGE_ICON;
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!(await copyPreviewImage(dataUrl))) return;
+    btn.innerHTML = CHECK_ICON;
+    btn.classList.add("history-action--done");
+    btn.title = "Copied";
+    btn.setAttribute("aria-label", "Copied");
+    clearTimeout(btn._glyphCopyTimer);
+    btn._glyphCopyTimer = setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.innerHTML = COPY_IMAGE_ICON;
+      btn.classList.remove("history-action--done");
+      btn.title = "Copy image";
+      btn.setAttribute("aria-label", "Copy image");
+    }, 1200);
+  });
+  return btn;
+}
+
 function closePreview() {
   openPreviewId = null;
   const pop = document.getElementById("history-preview-pop");
   if (pop) pop.remove();
+  clearCopyImageButtons();
   document.querySelectorAll(".history-preview[aria-expanded='true']").forEach((btn) => {
     btn.setAttribute("aria-expanded", "false");
   });
@@ -793,7 +861,7 @@ function fillShotPreview(pop, entry, anchor) {
   img.src = entry.preview;
   img.alt = "Captured font sample";
   img.addEventListener("load", () => positionPreview(pop, anchor));
-  pop.appendChild(img);
+  pop.append(img, makeCopyImageButton(entry.preview));
 }
 
 function fillUnavailablePreview(pop, entry) {
@@ -890,7 +958,9 @@ function renderHistoryPage() {
   renderEntryList(
     historyList,
     historyEntries.slice(0, HISTORY_LIMIT),
-    "Fonts you identify will show up here.",
+    saveHistory
+      ? "Fonts you identify will show up here."
+      : "Font history is turned off in Settings.",
     { allowDelete: true }
   );
   applyFoldState();
@@ -901,7 +971,8 @@ async function loadHistoryPage() {
   savedEntries = [];
   foldState = { saved: false, recent: false };
   try {
-    const data = await chrome.storage.local.get([HISTORY_KEY, SAVED_KEY, FOLD_KEY]);
+    const data = await chrome.storage.local.get([HISTORY_KEY, SAVED_KEY, FOLD_KEY, SAVE_HISTORY_KEY]);
+    saveHistory = data[SAVE_HISTORY_KEY] !== false;
     if (Array.isArray(data[HISTORY_KEY])) historyEntries = data[HISTORY_KEY];
     if (Array.isArray(data[SAVED_KEY])) savedEntries = data[SAVED_KEY];
     if (data[FOLD_KEY] && typeof data[FOLD_KEY] === "object") {
@@ -935,6 +1006,22 @@ document.getElementById("btn-history-back").addEventListener("click", () => {
   menu.classList.remove("hidden");
   document.querySelector(".popup").scrollTop = 0;
 });
+
+const saveHistoryToggle = document.getElementById("save-font-history");
+
+async function syncSaveHistoryToggle() {
+  if (!saveHistoryToggle || !chrome?.storage?.local) return;
+  const data = await chrome.storage.local.get(SAVE_HISTORY_KEY);
+  saveHistoryToggle.checked = data[SAVE_HISTORY_KEY] !== false;
+}
+
+if (saveHistoryToggle) {
+  saveHistoryToggle.addEventListener("change", () => {
+    const enabled = saveHistoryToggle.checked;
+    saveHistory = enabled;
+    chrome.storage.local.set({ [SAVE_HISTORY_KEY]: enabled });
+  });
+}
 
 const SELECTION_CARD_KEY = "selectionCard";
 const SELECTION_ORIGINS = ["http://*/*", "https://*/*"];
@@ -989,6 +1076,7 @@ document.getElementById("btn-settings").addEventListener("click", async () => {
   document.querySelector(".popup").scrollTop = 0;
   const { apiKey } = await chrome.storage.local.get("apiKey");
   if (apiKey) apiKeyInput.value = apiKey;
+  await syncSaveHistoryToggle();
   await syncSelectionCardToggle();
   const commands = await chrome.commands.getAll();
   const snip = commands.find((c) => c.name === "start-snip");
