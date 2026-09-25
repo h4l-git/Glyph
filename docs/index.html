@@ -220,6 +220,56 @@ h1 em { font-style: italic; color: var(--turquoise-deep); }
   color: var(--ink);
   margin-bottom: 2px;
 }
+.demo-frame { position: relative; }
+.shot-toggle {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: 14px;
+  color: var(--bronze);
+}
+.shot-grid figure.is-open { grid-column: 1 / -1; }
+.shot-grid figure.is-open .shot-toggle { cursor: zoom-out; }
+.shot-toggle:focus-visible,
+.frame-toggle:focus-visible {
+  outline: 2px solid var(--turquoise-deep);
+  outline-offset: 3px;
+}
+.frame-icon,
+.frame-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 0.5px solid rgba(36, 30, 21, 0.12);
+  background: rgba(246, 241, 231, 0.94);
+  color: var(--bronze);
+  box-shadow: 0 4px 12px rgba(36, 30, 21, 0.12);
+}
+.frame-icon { pointer-events: none; }
+.frame-toggle {
+  z-index: 2;
+  padding: 0;
+  cursor: pointer;
+}
+.icon-min { display: none; }
+.demo-frame.is-open .icon-max,
+.shot-grid figure.is-open .icon-max { display: none; }
+.demo-frame.is-open .icon-min,
+.shot-grid figure.is-open .icon-min { display: block; }
+.demo-frame.is-open {
+  width: min(1400px, calc(100vw - 48px));
+  margin-left: calc((100% - min(1400px, calc(100vw - 48px))) / 2);
+}
 .how-inner { max-width: 1000px; margin: 0 auto; }
 .eyebrow {
   font-size: 13px;
@@ -309,6 +359,12 @@ footer .display { font-size: 15px; color: var(--ink); }
   .hero-eye { max-width: 300px; order: -1; }
   .nav-links a:not(.btn) { display: none; }
   .shot-grid { grid-template-columns: 1fr; }
+  .shot-grid figure.is-open {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+  }
+  .shot-grid figure.is-open img,
+  .shot-grid figure.is-open .shot-toggle { border-radius: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -488,22 +544,44 @@ html.is-loading { overflow: hidden; }
     <p class="eyebrow">In use</p>
     <h2>A few seconds, on any page.</h2>
     <p class="in-use-lead">Open Glyph, then point at live text or box lettering in a picture. The typeface shows up beside it.</p>
-    <div class="demo-frame">
+    <div class="demo-frame" id="demo-frame">
       <video id="demo" controls playsinline muted loop preload="metadata" poster="shots/highlight.jpg" width="1280" height="720">
         <source src="shots/glyph-demo.mp4" type="video/mp4">
       </video>
+      <button type="button" class="frame-toggle" id="demo-toggle" aria-expanded="false" aria-controls="demo" aria-label="Maximise video">
+        <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
+        <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
+      </button>
     </div>
     <div class="shot-grid">
       <figure>
-        <img src="shots/menu.jpg" width="1600" height="900" alt="The Glyph menu open in the corner of a webpage, with the pointer on Highlight tool.">
+        <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the menu screenshot">
+          <img src="shots/menu.jpg" width="1600" height="900" alt="The Glyph menu open in the corner of a webpage, with the pointer on Highlight tool.">
+          <span class="frame-icon" aria-hidden="true">
+            <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
+            <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
+          </span>
+        </button>
         <figcaption><strong>The menu</strong>Snip or highlight, from the corner of the page.</figcaption>
       </figure>
       <figure>
-        <img src="shots/highlight.jpg" width="1600" height="900" alt="Highlight tool outlining a headline, with a card reading Fraunces, bold, 52 pixels.">
+        <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the highlight screenshot">
+          <img src="shots/highlight.jpg" width="1600" height="900" alt="Highlight tool outlining a headline, with a card reading Fraunces, bold, 52 pixels.">
+          <span class="frame-icon" aria-hidden="true">
+            <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
+            <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
+          </span>
+        </button>
         <figcaption><strong>Highlight</strong>Point at live text and read the face, size, and colour.</figcaption>
       </figure>
       <figure>
-        <img src="shots/snip.jpg" width="1600" height="900" alt="Snip tool boxing the words Opening Night on a poster, with a card naming Playfair Display.">
+        <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the snip screenshot">
+          <img src="shots/snip.jpg" width="1600" height="900" alt="Snip tool boxing the words Opening Night on a poster, with a card naming Playfair Display.">
+          <span class="frame-icon" aria-hidden="true">
+            <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
+            <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
+          </span>
+        </button>
         <figcaption><strong>Snip</strong>Box lettering trapped in an image. Glyph names the typeface.</figcaption>
       </figure>
     </div>
@@ -623,10 +701,44 @@ html.is-loading { overflow: hidden; }
   }
 
   var demo = document.getElementById("demo");
-  if (demo && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (demo && !reduceMotion) {
     demo.autoplay = true;
     demo.play().catch(function () {});
   }
+
+  function setExpanded(host, open) {
+    host.classList.toggle("is-open", open);
+    var btn = host.querySelector("[aria-expanded]");
+    if (!btn) return;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    var label = btn.getAttribute("aria-label") || "";
+    btn.setAttribute("aria-label", (open ? "Minimise" : "Maximise") + label.replace(/^(Maximise|Minimise)/, ""));
+  }
+
+  var demoFrame = document.getElementById("demo-frame");
+  var demoToggle = document.getElementById("demo-toggle");
+  if (demoFrame && demoToggle) {
+    demoToggle.addEventListener("click", function () {
+      setExpanded(demoFrame, !demoFrame.classList.contains("is-open"));
+    });
+  }
+
+  document.querySelectorAll(".shot-toggle").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var figure = btn.closest("figure");
+      var open = !figure.classList.contains("is-open");
+      document.querySelectorAll(".shot-grid figure.is-open").forEach(function (other) {
+        if (other !== figure) setExpanded(other, false);
+      });
+      setExpanded(figure, open);
+      if (open) figure.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll(".is-open").forEach(function (host) { setExpanded(host, false); });
+  });
 })();
 </script>
 
