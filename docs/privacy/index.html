@@ -68,7 +68,7 @@ li { margin-bottom: 6px; }
 <main>
   <a class="back" href="../">&larr; Back to Glyph</a>
   <h1 class="display">Privacy Policy</h1>
-  <p class="updated">Last updated: 24 September 2026</p>
+  <p class="updated">Last updated: 25 September 2026</p>
 
   <p>Glyph is a Chrome extension that identifies the font used in text on a webpage. This page explains what data Glyph accesses, stores, and sends, and why.</p>
 
@@ -84,15 +84,19 @@ li { margin-bottom: 6px; }
   <p>Glyph stores the following locally on your device using Chrome's <code>storage</code> API. None of this is synced to any account or server we control:</p>
   <ul>
     <li>Your Anthropic API key, if you choose to add one</li>
+    <li>The Claude model you choose for the Snip tool</li>
     <li>Your light/dark theme preference</li>
     <li>Your keyboard shortcut settings</li>
-    <li>Which corner the window opens in</li>
+    <li>Which corner the window opens in, and its size if you resize it</li>
     <li>Whether "Show card on text selection" is enabled</li>
+    <li>Whether "Save font history" is enabled</li>
+    <li>Recent font identifications, while saving is on (up to 10): the font details, a short text sample, the page address and title, and a cropped preview of the region you selected</li>
+    <li>Fonts you save from History, which stay on this device until you remove them</li>
     <li>A short local cache of font-source lookups (family name → official page URL) and catalog indexes, used only to resolve download/specimen links</li>
   </ul>
 
   <h2>What Glyph sends, and to whom</h2>
-  <p>When you use the Snip tool, the cropped image is sent with your API key to Anthropic (<code>api.anthropic.com</code>) so Claude can suggest a typeface. This only happens when you actively use the Snip tool. When you open a font preview in History, Glyph may also load that typeface from Google Fonts (their official stylesheet) so it can show a live text sample; installed and generic fonts are rendered locally and nothing is fetched.</p>
+  <p>When you use the Snip tool, the cropped image is sent with your API key and the Claude model you selected to Anthropic (<code>api.anthropic.com</code>) so Claude can suggest a typeface. The extension sends that request itself; the webpage does not receive your API key. This only happens when you actively use the Snip tool. History, saved fonts, page addresses, and preview images stay on your device and are not uploaded. When you open a font preview in History, Glyph may also load that typeface from Google Fonts (their official stylesheet) so it can show a live text sample; installed and generic fonts are rendered locally and nothing is fetched.</p>
   <p>When Glyph shows a result, it may also query public font catalogs to find an official specimen or download page for the identified family. Those requests send only the font family name - not the page you were viewing, screenshots, or other browsing data. Glyph may contact:</p>
   <ul>
     <li><strong>Google Fonts</strong> (<code>fonts.googleapis.com</code>) - to check whether the family is listed there</li>
@@ -107,7 +111,7 @@ li { margin-bottom: 6px; }
   <ul>
     <li><strong>activeTab</strong> - lets Glyph run its tools in the tab you're viewing, only after you click a button in the popup.</li>
     <li><strong>scripting</strong> - lets Glyph inject the Snip/Highlight tool overlay into the page on demand.</li>
-    <li><strong>storage</strong> - lets Glyph save your settings and the font-source cache locally, as described above.</li>
+    <li><strong>storage</strong> - lets Glyph save your settings, font history, saved fonts, and the font-source cache locally, as described above.</li>
     <li><strong>Access to Anthropic</strong> - lets the Snip tool send the cropped image with your API key, as described above.</li>
     <li><strong>Access to font catalog sites</strong> - lets Glyph resolve an official page for an identified font, as described above.</li>
     <li><strong>Optional access to websites</strong> - requested only if you enable "Show card on text selection", so Glyph can identify fonts when you highlight text.</li>
