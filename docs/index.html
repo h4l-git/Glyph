@@ -165,7 +165,60 @@ h1 em { font-style: italic; color: var(--turquoise-deep); }
 .btn-ghost:hover { background: rgba(107, 79, 48, 0.06); }
 
 .how {
-  padding: 6vh 6vw 10vh;
+  padding: 6vh 6vw 4vh;
+}
+.in-use {
+  padding: 4vh 6vw 10vh;
+}
+.in-use-inner { max-width: 1000px; margin: 0 auto; }
+.in-use h2 { margin-bottom: 14px; }
+.in-use-lead {
+  color: var(--muted);
+  font-size: 17px;
+  max-width: 48ch;
+  margin-bottom: 28px;
+}
+.demo-frame {
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 0.5px solid rgba(36, 30, 21, 0.08);
+  box-shadow: 0 18px 40px rgba(36, 30, 21, 0.07);
+}
+.demo-frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f7f4ee;
+}
+.shot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+.shot-grid figure { margin: 0; }
+.shot-grid img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 14px;
+  border: 0.5px solid rgba(36, 30, 21, 0.08);
+  background: #fff;
+}
+.shot-grid figcaption {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.shot-grid strong {
+  display: block;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--ink);
+  margin-bottom: 2px;
 }
 .how-inner { max-width: 1000px; margin: 0 auto; }
 .eyebrow {
@@ -255,6 +308,7 @@ footer .display { font-size: 15px; color: var(--ink); }
   .hero { grid-template-columns: 1fr; padding-top: 4vh; }
   .hero-eye { max-width: 300px; order: -1; }
   .nav-links a:not(.btn) { display: none; }
+  .shot-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -429,6 +483,33 @@ html.is-loading { overflow: hidden; }
   </div>
 </section>
 
+<section class="in-use" id="in-use">
+  <div class="in-use-inner">
+    <p class="eyebrow">In use</p>
+    <h2>A few seconds, on any page.</h2>
+    <p class="in-use-lead">Open Glyph, then point at live text or box lettering in a picture. The typeface shows up beside it.</p>
+    <div class="demo-frame">
+      <video id="demo" controls playsinline muted loop preload="metadata" poster="shots/highlight.jpg" width="1280" height="720">
+        <source src="shots/glyph-demo.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="shot-grid">
+      <figure>
+        <img src="shots/menu.jpg" width="1600" height="900" alt="The Glyph menu open in the corner of a webpage, with the pointer on Highlight tool.">
+        <figcaption><strong>The menu</strong>Snip or highlight, from the corner of the page.</figcaption>
+      </figure>
+      <figure>
+        <img src="shots/highlight.jpg" width="1600" height="900" alt="Highlight tool outlining a headline, with a card reading Fraunces, bold, 52 pixels.">
+        <figcaption><strong>Highlight</strong>Point at live text and read the face, size, and colour.</figcaption>
+      </figure>
+      <figure>
+        <img src="shots/snip.jpg" width="1600" height="900" alt="Snip tool boxing the words Opening Night on a poster, with a card naming Playfair Display.">
+        <figcaption><strong>Snip</strong>Box lettering trapped in an image. Glyph names the typeface.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <footer>
   <span class="display wordmark" aria-label="Glyph">
     <span class="latin-row" aria-hidden="true"><span>G</span><span>l</span><span>y</span><span>p</span><span>h</span></span>
@@ -539,6 +620,12 @@ html.is-loading { overflow: hidden; }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+
+  var demo = document.getElementById("demo");
+  if (demo && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    demo.autoplay = true;
+    demo.play().catch(function () {});
   }
 })();
 </script>

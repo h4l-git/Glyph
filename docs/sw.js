@@ -1,4 +1,4 @@
-var CACHE = "glyph-home-v1";
+var CACHE = "glyph-home-v2";
 
 self.addEventListener("install", function (event) {
   event.waitUntil(caches.open(CACHE).then(function (cache) {
@@ -8,7 +8,15 @@ self.addEventListener("install", function (event) {
 });
 
 self.addEventListener("activate", function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(caches.keys().then(function (keys) {
+    return Promise.all(keys.filter(function (key) {
+      return key !== CACHE;
+    }).map(function (key) {
+      return caches.delete(key);
+    }));
+  }).then(function () {
+    return self.clients.claim();
+  }));
 });
 
 function isHome(url) {
