@@ -67,7 +67,12 @@ if (inPanel) {
     updateUiScale();
   });
   window.addEventListener("message", (e) => {
-    if (e.source !== window.parent || !e.data || e.data.type !== "GLYPH_PANEL_MODE") return;
+    if (e.source !== window.parent || !e.data) return;
+    if (e.data.type === "GLYPH_PANEL_CORNER") {
+      applyPanelCorner(e.data.corner);
+      return;
+    }
+    if (e.data.type !== "GLYPH_PANEL_MODE") return;
     const wantFill = !!e.data.fill;
     if (!wantFill || !naturalHeight) {
       root.removeAttribute("data-panel-fill");
@@ -79,7 +84,9 @@ if (inPanel) {
     sendSize();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closePopup();
+    if (e.key !== "Escape") return;
+    if (typeof closeAiMenu === "function" && closeAiMenu()) return;
+    closePopup();
   });
   window.parent.postMessage({ type: "GLYPH_PANEL_READY" }, "*");
   sendSize();
@@ -94,9 +101,30 @@ function applyTheme(theme) {
   }
 }
 
+const PANEL_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+function applyPanelCorner(corner) {
+  const next = PANEL_CORNERS.includes(corner) ? corner : "top-right";
+  const root = document.documentElement;
+  root.setAttribute("data-panel-corner", next);
+  if (inPanel) root.setAttribute("data-grip", next.startsWith("bottom") ? "top" : "bottom");
+  document.querySelectorAll(".corner-option").forEach((btn) => {
+    const on = btn.dataset.corner === next;
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+    btn.tabIndex = on ? 0 : -1;
+  });
+  return next;
+}
+
+async function syncPanelCorner() {
+  const data = await chrome.storage.local.get("panelCorner");
+  applyPanelCorner(data.panelCorner);
+}
+
 (async () => {
-  const { theme } = await chrome.storage.local.get("theme");
+  const { theme, panelCorner } = await chrome.storage.local.get(["theme", "panelCorner"]);
   applyTheme(theme);
+  if (inPanel) applyPanelCorner(panelCorner);
 })();
 
 if (btnTheme) {
@@ -136,7 +164,123 @@ async function injectAndStart(mode) {
   }
 }
 
-document.getElementById("btn-snip").addEventListener("click", () => injectAndStart("snip"));
+document.querySelector(".snip-item").addEventListener("click", (event) => {
+  if (event.target.closest(".ai-picker")) return;
+  injectAndStart("snip");
+});
+
+const SNIP_MODELS = [
+  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
+  { id: "claude-sonnet-5", label: "Sonnet 5" },
+  { id: "claude-opus-5-5", label: "Opus 5.5" },
+  { id: "claude-fable-5-1", label: "Fable 5.1" },
+];
+const DEFAULT_SNIP_MODEL = "claude-sonnet-5";
+const aiPicker = document.getElementById("ai-picker");
+const aiChip = document.getElementById("btn-ai-model");
+const aiMenu = document.getElementById("ai-model-menu");
+
+function snipModelLabel(id) {
+  return SNIP_MODELS.find((model) => model.id === id)?.label || "Sonnet 5";
+}
+
+function applySnipModel(id) {
+  const next = SNIP_MODELS.some((model) => model.id === id) ? id : DEFAULT_SNIP_MODEL;
+  aiMenu.querySelectorAll(".ai-option").forEach((option) => {
+    option.setAttribute("aria-selected", option.dataset.model === next ? "true" : "false");
+  });
+  aiChip.title = `Snip uses ${snipModelLabel(next)}`;
+  return next;
+}
+
+function aiMenuOpen() {
+  return aiMenu && !aiMenu.classList.contains("hidden");
+}
+
+function placeAiMenu() {
+  aiMenu.style.transform = "";
+  const card = aiMenu.closest(".popup").getBoundingClientRect();
+  const menu = aiMenu.getBoundingClientRect();
+  const margin = 8;
+  let shift = 0;
+  if (menu.right > card.right - margin) shift -= menu.right - (card.right - margin);
+  if (menu.left + shift < card.left + margin) shift += card.left + margin - (menu.left + shift);
+  aiMenu.style.transform = shift ? `translateX(${Math.round(shift)}px)` : "";
+}
+
+function setAiMenuOpen(open) {
+  aiMenu.classList.toggle("hidden", !open);
+  aiChip.setAttribute("aria-expanded", open ? "true" : "false");
+  if (!open) {
+    aiMenu.style.transform = "";
+    return;
+  }
+  placeAiMenu();
+  const selected = aiMenu.querySelector('.ai-option[aria-selected="true"]') || aiMenu.querySelector(".ai-option");
+  selected?.focus();
+}
+
+function closeAiMenu() {
+  if (!aiMenuOpen()) return false;
+  const restoreFocus = aiMenu.contains(document.activeElement);
+  setAiMenuOpen(false);
+  if (restoreFocus) aiChip.focus();
+  return true;
+}
+
+aiPicker.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+aiChip.addEventListener("click", () => {
+  const open = !aiMenuOpen();
+  setAiMenuOpen(open);
+});
+
+aiChip.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" && !aiMenuOpen()) {
+    event.preventDefault();
+    setAiMenuOpen(true);
+  }
+  if (event.key === "Escape" && closeAiMenu()) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+});
+
+aiMenu.addEventListener("keydown", (event) => {
+  const options = [...aiMenu.querySelectorAll(".ai-option")];
+  const index = options.indexOf(document.activeElement);
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const next = options[(index + step + options.length) % options.length];
+    next?.focus();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeAiMenu();
+    aiChip.focus();
+  }
+});
+
+aiMenu.querySelectorAll(".ai-option").forEach((option) => {
+  option.addEventListener("click", async () => {
+    const id = applySnipModel(option.dataset.model);
+    closeAiMenu();
+    aiChip.focus();
+    await chrome.storage.local.set({ snipModel: id });
+  });
+});
+
+document.addEventListener("click", (event) => {
+  if (!aiPicker.contains(event.target)) closeAiMenu();
+});
+
+(async () => {
+  const { snipModel } = await chrome.storage.local.get("snipModel");
+  applySnipModel(snipModel);
+})();
 document.getElementById("btn-highlight").addEventListener("click", () => injectAndStart("highlight"));
 
 document.getElementById("btn-website").addEventListener("click", () => {
@@ -1080,16 +1224,56 @@ document.getElementById("btn-settings").addEventListener("click", async () => {
   syncApiKeyCopy();
   await syncSaveHistoryToggle();
   await syncSelectionCardToggle();
+  await syncPanelCorner();
   const commands = await chrome.commands.getAll();
   const snip = commands.find((c) => c.name === "start-snip");
+  const highlight = commands.find((c) => c.name === "start-highlight");
   document.getElementById("shortcut-display").textContent =
     snip?.shortcut || "Not set";
+  document.getElementById("highlight-shortcut-display").textContent =
+    highlight?.shortcut || "Not set";
 });
 
-document.getElementById("btn-shortcut").addEventListener("click", () => {
+function openShortcutSettings() {
   chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
   closePopup();
+}
+
+document.getElementById("btn-shortcut").addEventListener("click", openShortcutSettings);
+document.getElementById("btn-highlight-shortcut").addEventListener("click", openShortcutSettings);
+
+document.querySelectorAll(".corner-option").forEach((btn) => {
+  btn.addEventListener("click", () => choosePanelCorner(btn.dataset.corner));
+  btn.addEventListener("keydown", (event) => {
+    const next = cornerFromKey(btn.dataset.corner, event.key);
+    if (!next || next === btn.dataset.corner) return;
+    event.preventDefault();
+    const target = document.querySelector(`.corner-option[data-corner="${next}"]`);
+    if (target) target.focus();
+    choosePanelCorner(next);
+  });
 });
+
+function cornerFromKey(current, key) {
+  const grid = [
+    ["top-left", "top-right"],
+    ["bottom-left", "bottom-right"],
+  ];
+  const row = grid.findIndex((line) => line.includes(current));
+  if (row < 0) return null;
+  const col = grid[row].indexOf(current);
+  if (key === "ArrowLeft") return grid[row][0];
+  if (key === "ArrowRight") return grid[row][1];
+  if (key === "ArrowUp") return grid[0][col];
+  if (key === "ArrowDown") return grid[1][col];
+  return null;
+}
+
+function choosePanelCorner(corner) {
+  const next = applyPanelCorner(corner);
+  chrome.storage.local.set({ panelCorner: next });
+  if (inPanel) window.parent.postMessage({ type: "GLYPH_PANEL_CORNER", corner: next }, "*");
+}
 
 document.getElementById("btn-create-api-key").addEventListener("click", () => {
   chrome.tabs.create({ url: "https://console.anthropic.com/settings/keys" });

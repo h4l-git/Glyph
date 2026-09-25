@@ -1,11 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="light">
 <head>
   <meta charset="utf-8" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Noto+Sans+Egyptian+Hieroglyphs&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="../popup.css" />
+  <style>
+    html, body { background: transparent; color-scheme: light; }
+    .latin-row span, .hiero-row span { animation: none !important; }
+    .hiero-row span { opacity: 0 !important; }
+  </style>
 </head>
 <body>
   <div class="popup">
@@ -220,6 +225,5 @@
   </section>
   </div>
 
-  <script src="popup.js"></script>
 </body>
 </html>

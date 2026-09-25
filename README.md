@@ -8,7 +8,7 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 - **Highlight tool** — hover and click any element on the page to read off its font family, weight, and size directly from the computed styles.
 - **Toolbar badge** — the extension icon shows ✂ while Snip mode is active and 🖍 while Highlight mode is active, so you always know which tool is running.
 - **Light/dark mode** — toggle the popup's theme from the button in the top-right corner; your choice is remembered across sessions.
-- **Keyboard shortcut** — launch the Snip tool without opening the popup (default: `Alt+Shift+G`, configurable in Chrome's shortcut settings).
+- **Keyboard shortcuts** — launch a tool without opening the popup. Snip defaults to `Alt+Shift+G` and Highlight to `Alt+Shift+H`, both configurable in Chrome's shortcut settings.
 
 ## Installation (unpacked / developer mode)
 
@@ -31,7 +31,8 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 Open **Settings** from the popup menu to:
 
 - Add your API key for font identification (used by the Snip tool). It's stored locally on your device via `chrome.storage.local` and never leaves your machine except in requests to the identification API.
-- View or change the Snip tool's keyboard shortcut.
+- View or change the Snip and Highlight tool keyboard shortcuts.
+- Choose which corner of the page the window opens in.
 
 ## Project structure
 
@@ -42,14 +43,14 @@ Open **Settings** from the popup menu to:
 | `panel.js` | Injected on toolbar click; shows `popup.html` in a transparent, rounded in-page iframe with a drag-to-resize grip (double-click the grip to reset) |
 | `unavailable.html` / `unavailable.css` / `unavailable.js` | Small native popup shown on pages Chrome won't let extensions run on (New Tab, `chrome://`, Web Store) |
 | `content.js` / `content.css` | Injected into the page to run the Snip and Highlight tools |
-| `background.js` | Service worker — handles screenshot capture, keyboard shortcut, and the mode badge |
+| `background.js` | Service worker — handles screenshot capture, keyboard shortcuts, and the mode badge |
 | `icons/` | Toolbar and store icons |
 
 ## Permissions
 
 - `activeTab` — required to inject the Snip/Highlight tools into the page you're currently viewing.
 - `scripting` — required to run `panel.js`, `content.js` and `content.css` on demand.
-- `storage` — required to save your API key, theme preference, and keyboard shortcut locally.
+- `storage` — required to save your API key, theme preference, and keyboard shortcuts locally.
 
 ## Development
 

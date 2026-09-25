@@ -120,8 +120,24 @@
   }
 
   // Hide Glyph chrome while the tab is captured so the tint/outlines aren't in the shot.
-  async function captureScreen() {
-    const nodes = document.querySelectorAll(".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline");
+  // Result cards are left alone when hideCards is false — toggling a card that is
+  // already on screen makes it blink. Calls are serialized so one capture cannot
+  // restore chrome while another is still waiting for the hidden frame.
+  let captureQueue = Promise.resolve();
+
+  function captureScreen(options) {
+    const job = captureQueue.then(() => captureScreenNow(options));
+    captureQueue = job.then(() => {}, () => {});
+    return job;
+  }
+
+  async function captureScreenNow(options) {
+    const hideCards = !options || options.hideCards !== false;
+    const hideOutlines = !options || options.hideOutlines !== false;
+    const parts = [".glyph-overlay", ".glyph-box"];
+    if (hideCards) parts.push(".glyph-card");
+    if (hideOutlines) parts.push(".glyph-hl-outline");
+    const nodes = document.querySelectorAll(parts.join(", "));
     const prev = [];
     nodes.forEach((n) => {
       prev.push([n, n.style.visibility]);
@@ -158,6 +174,37 @@
     });
   }
 
+  // JPEG smears the terminals that distinguish a face. Keep a PNG, and enlarge a
+  // short crop so the letters are large enough to read. Sonnet 5 accepts a long
+  // edge up to 2576px.
+  function prepareIdentifyImage(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxLong = 2000;
+        const minShort = 480;
+        const long = Math.max(img.width, img.height, 1);
+        const short = Math.min(img.width, img.height, 1);
+        let scale = short < minShort ? minShort / short : 1;
+        if (long * scale > maxLong) scale = maxLong / long;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        try {
+          resolve(canvas.toDataURL("image/png"));
+        } catch (err) {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve("");
+      img.src = dataUrl;
+    });
+  }
+
   function clampCaptureRect(rect) {
     const x = Math.max(0, rect.x);
     const y = Math.max(0, rect.y);
@@ -169,8 +216,8 @@
     };
   }
 
-  async function captureRegionPreview(rect) {
-    const res = await captureScreen();
+  async function captureRegionPreview(rect, options) {
+    const res = await captureScreen(options);
     if (!res?.dataUrl) return "";
     const cropped = await cropImage(res.dataUrl, clampCaptureRect(rect));
     return compressPreview(cropped);
@@ -182,7 +229,11 @@
       showCard(rect.x, rect.y, "Couldn't capture the screen. Try again.");
       return;
     }
-    const cropped = await cropImage(res.dataUrl, rect);
+    const cropped = await cropImage(res.dataUrl, clampCaptureRect(rect));
+    if (!cropped) {
+      showCard(rect.x, rect.y, "Couldn't capture the screen. Try again.");
+      return;
+    }
     showCard(rect.x, rect.y, "Identifying font…");
     const { apiKey } = await chrome.storage.local.get("apiKey");
     if (!apiKey) {
@@ -190,14 +241,37 @@
       return;
     }
     try {
-      const result = await identifyFont(cropped, apiKey);
-      const formatted = formatIdentifyResult(result);
-      updateCard(formatted);
+      const [image, sampledColor] = await Promise.all([
+        prepareIdentifyImage(cropped),
+        sampleTextColor(cropped),
+      ]);
+      const result = await identifyFont(image || cropped);
+      const faces = Array.isArray(result?.fonts) && result.fonts.length ? result.fonts : [result];
+      const formatted = faces.map((face) => formatIdentifyResult(face, faces.length === 1 ? sampledColor : ""));
+      showResultCards(rect.x, rect.y, formatted);
       if (await historySavingEnabled()) {
-        rememberResult(formatted, await compressPreview(cropped));
+        const preview = await compressPreview(cropped);
+        for (const entry of formatted) await rememberResult(entry, preview);
       }
     } catch (err) {
-      updateCard("Identification failed. Check your API key and try again.");
+      updateCard(identifyErrorMessage(err));
+    }
+  }
+
+  function identifyErrorMessage(err) {
+    switch (err && err.code) {
+      case "no_key":
+        return "No API key set. Add one in Glyph settings.";
+      case "unauthorized":
+        return "That API key was rejected. Check it in Glyph settings.";
+      case "rate_limit":
+        return "Anthropic rate limit reached. Wait a moment and try again.";
+      case "overloaded":
+        return "Anthropic is busy. Try again in a moment.";
+      case "network":
+        return "Couldn't reach Anthropic. Try again.";
+      default:
+        return "Identification failed. Try again.";
     }
   }
 
@@ -221,16 +295,20 @@
     });
   }
 
-  async function identifyFont(imageDataUrl, apiKey) {
-    // Placeholder: swap in your font-recognition API endpoint here.
-    // Expected contract: POST image, receive { font: string, confidence: number }
-    const resp = await fetch("https://api.glyph.app/v1/identify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({ image: imageDataUrl }),
+  function identifyFont(imageDataUrl) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: "GLYPH_IDENTIFY", image: imageDataUrl }, (res) => {
+        if (chrome.runtime.lastError || !res) {
+          reject(Object.assign(new Error("network"), { code: "network" }));
+          return;
+        }
+        if (res.error) {
+          reject(Object.assign(new Error(res.error), { code: res.error }));
+          return;
+        }
+        resolve(res);
+      });
     });
-    if (!resp.ok) throw new Error("API error");
-    return await resp.json();
   }
 
   /* ---------- Highlight tool ---------- */
@@ -240,6 +318,7 @@
   let hlOutline = null;
   let hlLockedOutline = null;
   let hlLockedRect = null;
+  let hlShowGeneration = 0;
 
   function makeOutline() {
     const el = document.createElement("div");
@@ -440,20 +519,23 @@
     placeHighlight(hlOutline, target.rect);
   }
 
-  function onHighlightClick(e) {
+  async function onHighlightClick(e) {
     if (isInteractiveGlyphUI(e.target)) return; // let the card's close/copy/fonts buttons work
     e.preventDefault();
     e.stopPropagation();
     const target = textTargetFromPoint(e.clientX, e.clientY);
     if (!target || isInteractiveGlyphUI(target.el)) return;
-    const content = fontContentFromElement(target.el);
+    const sampleText = sampleTextFromHighlightTarget(target);
+    const content = fontContentFromElement(target.el, sampleText);
     if (!content) return;
-    content.sampleText = sampleTextFromHighlightTarget(target);
-    placeHighlight(hlLockedOutline, target.rect);
+    if (sampleText) content.sampleText = sampleText;
+
+    // The tool stays active after a click; Esc / right-click / card close ends it.
+    const showGen = ++hlShowGeneration;
+    const point = { x: e.clientX, y: e.clientY };
     hlLockedRect = target.rect;
     if (hlOutline) hlOutline.style.display = "none";
-    // The tool stays active after a click; Esc / right-click / card close ends it.
-    showCard(e.clientX, e.clientY, content);
+    placeHighlight(hlLockedOutline, target.rect);
     const pad = 4;
     const previewRect = {
       x: target.rect.left - pad,
@@ -461,7 +543,41 @@
       w: target.rect.width + pad * 2,
       h: target.rect.height + pad * 2,
     };
-    rememberResultWithPreview(content, previewRect);
+    const stale = () => showGen !== hlShowGeneration || mode !== "highlight";
+
+    const saving = await historySavingEnabled();
+    if (stale()) return;
+
+    // Build the card unpainted. A history shot hides page chrome for a frame,
+    // and the font-source link can change the card's width — either one makes
+    // the card flicker if it is already visible. Reveal it once both are done.
+    showCard(point.x, point.y, content, { hidden: true });
+    let dataUrl = "";
+    if (saving) {
+      try {
+        const res = await captureScreen({ hideCards: false, hideOutlines: false });
+        dataUrl = res?.dataUrl || "";
+      } catch (err) {
+        dataUrl = "";
+      }
+    }
+    if (card && card._glyphSourceReady) {
+      await Promise.race([
+        card._glyphSourceReady,
+        new Promise((resolve) => setTimeout(resolve, 80)),
+      ]);
+    }
+    if (stale()) return;
+    if (card) card.style.visibility = "";
+
+    if (!saving || !dataUrl) return;
+    try {
+      const cropped = await cropImage(dataUrl, clampCaptureRect(previewRect));
+      const preview = cropped ? await compressPreview(cropped) : "";
+      if (!stale()) await rememberResult(content, preview);
+    } catch (err) {
+      // History is best-effort; the card is already on screen.
+    }
   }
 
   // "16px" -> "16"; "1.5em" -> "1.5". Display still uses the original string.
@@ -524,14 +640,245 @@
     return false;
   }
 
-  function fontContentFromElement(el) {
+  // font-family is a stack. The first name is what the page asked for; the browser
+  // paints the first family that is actually available and has the glyph.
+  function splitFontFamily(fontFamily) {
+    const out = [];
+    let current = "";
+    let quote = "";
+    for (const ch of String(fontFamily || "")) {
+      if (quote) {
+        if (ch === quote) quote = "";
+        else current += ch;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === ",") {
+        const name = current.trim();
+        if (name) out.push(name);
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    const name = current.trim();
+    if (name) out.push(name);
+    return out;
+  }
+
+  function isGenericFamilyName(name) {
+    return GENERIC_FONT_FAMILIES.has(String(name || "").trim().toLowerCase());
+  }
+
+  function quoteFamilyForCanvas(name) {
+    if (isGenericFamilyName(name)) return String(name).trim();
+    return `"${String(name).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+
+  function canvasFontStyle(style) {
+    const s = String(style || "normal").trim().toLowerCase();
+    if (s.startsWith("italic")) return "italic";
+    if (s.startsWith("oblique")) return "oblique";
+    return "normal";
+  }
+
+  function canvasFontWeight(weight) {
+    const w = String(weight || "400").trim();
+    if (/^(normal|bold|bolder|lighter|[1-9]00)$/i.test(w)) return w;
+    const n = Number(w);
+    if (Number.isFinite(n) && n > 0) return String(Math.round(n));
+    return "400";
+  }
+
+  function canvasFont(weight, style, sizePx, families) {
+    const list = families.map(quoteFamilyForCanvas).join(", ");
+    return `${canvasFontStyle(style)} ${canvasFontWeight(weight)} ${sizePx}px ${list}`;
+  }
+
+  const GLYPH_BASELINES = ["monospace", "serif", "sans-serif"];
+  const glyphAnswerCache = new Map();
+  let glyphMeasureCtx = null;
+  let glyphPixelCtx = null;
+
+  function rememberGlyphAnswer(key, value) {
+    if (glyphAnswerCache.size > 500) glyphAnswerCache.clear();
+    glyphAnswerCache.set(key, value);
+    return value;
+  }
+
+  function glyphMeasureContext() {
+    if (!glyphMeasureCtx) glyphMeasureCtx = document.createElement("canvas").getContext("2d");
+    return glyphMeasureCtx;
+  }
+
+  function glyphPixelContext() {
+    if (!glyphPixelCtx) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 96;
+      canvas.height = 80;
+      glyphPixelCtx = canvas.getContext("2d", { willReadFrequently: true });
+    }
+    return glyphPixelCtx;
+  }
+
+  function paintChars(text) {
+    let raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (Array.from(raw).length >= SAMPLE_TEXT_MAX && raw.endsWith("\u2026")) raw = raw.slice(0, -1).trim();
+    const sliced = Array.from(raw).slice(0, SAMPLE_TEXT_MAX).join("");
+    const pieces = typeof Intl !== "undefined" && Intl.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(sliced), (part) => part.segment)
+      : Array.from(sliced);
+    const chars = [];
+    const seen = new Set();
+    for (const ch of pieces) {
+      if (!ch.trim()) continue;
+      if (seen.has(ch)) continue;
+      seen.add(ch);
+      chars.push(ch);
+      if (chars.length >= 40) break;
+    }
+    return chars;
+  }
+
+  function widthsDiffer(a, b) {
+    return Math.abs(a - b) > 0.2;
+  }
+
+  function textWidthDiffers(family, text, weight, style) {
+    const key = `width\n${family}\n${weight}\n${style}\n${text}`;
+    if (glyphAnswerCache.has(key)) return glyphAnswerCache.get(key);
+    const ctx = glyphMeasureContext();
+    if (!ctx || !text) return rememberGlyphAnswer(key, false);
+    try {
+      for (const baseline of GLYPH_BASELINES) {
+        ctx.font = canvasFont(weight, style, 72, [baseline]);
+        const baseWidth = ctx.measureText(text).width;
+        ctx.font = canvasFont(weight, style, 72, [family, baseline]);
+        if (widthsDiffer(ctx.measureText(text).width, baseWidth)) return rememberGlyphAnswer(key, true);
+      }
+    } catch (err) {
+      return rememberGlyphAnswer(key, false);
+    }
+    return rememberGlyphAnswer(key, false);
+  }
+
+  // Width decides first. Pixels are only compared when one character matches every baseline width.
+  function familyAffectsText(family, text, weight, style) {
+    const key = `text\n${family}\n${weight}\n${style}\n${text}`;
+    if (glyphAnswerCache.has(key)) return glyphAnswerCache.get(key);
+    if (textWidthDiffers(family, text, weight, style)) return rememberGlyphAnswer(key, true);
+    const single = Array.from(text).length === 1;
+    if (!single) return rememberGlyphAnswer(key, false);
+    return rememberGlyphAnswer(key, glyphPixelsDiffer(family, text, weight, style));
+  }
+
+  function glyphPixelsDiffer(family, text, weight, style) {
+    const ctx = glyphPixelContext();
+    if (!ctx) return false;
+    const canvas = ctx.canvas;
+    const draw = (families) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = canvasFont(weight, style, 48, families);
+      ctx.fillStyle = "#000";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(text, 4, 58);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    try {
+      for (const baseline of GLYPH_BASELINES) {
+        const withFamily = draw([family, baseline]);
+        const baseOnly = draw([baseline]);
+        for (let i = 3; i < withFamily.length; i += 4) {
+          if (withFamily[i] !== baseOnly[i]) return true;
+        }
+      }
+    } catch (err) {
+      return false;
+    }
+    return false;
+  }
+
+  function familyUsedInSample(family, chars, weight, style) {
+    if (textWidthDiffers(family, chars.join(""), weight, style)) return true;
+    for (const ch of chars.slice(0, 4)) {
+      if (glyphPixelsDiffer(family, ch, weight, style)) return true;
+    }
+    return false;
+  }
+
+  function resolvePaintedFont(fontFamily, sampleText, weight, style) {
+    const stack = splitFontFamily(fontFamily);
+    if (!stack.length) return null;
+    const chars = paintChars(sampleText);
+    const counts = new Map();
+
+    const claim = (family) => counts.set(family, (counts.get(family) || 0) + 1);
+
+    if (!chars.length) {
+      const probe = "AaBb0123";
+      for (const family of stack) {
+        if (isGenericFamilyName(family)) return { primary: family, fallbacks: [] };
+        if (textWidthDiffers(family, probe, weight, style) || glyphPixelsDiffer(family, "A", weight, style)) {
+          return { primary: family, fallbacks: [] };
+        }
+      }
+      return { primary: stack[0], fallbacks: [] };
+    }
+
+    const pending = new Set(chars);
+    let stopFamily = null;
+    for (const family of stack) {
+      if (!pending.size) break;
+      if (isGenericFamilyName(family)) {
+        stopFamily = family;
+        break;
+      }
+      const remaining = Array.from(pending);
+      if (!familyUsedInSample(family, remaining, weight, style)) continue;
+      for (const ch of remaining) {
+        if (!familyAffectsText(family, ch, weight, style)) continue;
+        claim(family);
+        pending.delete(ch);
+      }
+    }
+    if (pending.size) {
+      const rest = stopFamily || stack[stack.length - 1];
+      pending.forEach(() => claim(rest));
+    }
+
+    let primary = stack[0];
+    let best = -1;
+    for (const family of stack) {
+      const n = counts.get(family) || 0;
+      if (n > best) {
+        best = n;
+        primary = family;
+      }
+    }
+    const fallbacks = stack.filter((family) => family !== primary && counts.get(family));
+    return { primary, fallbacks };
+  }
+
+  function fontContentFromElement(el, sampleText) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE || isGlyphUI(el)) return null;
     const cs = getComputedStyle(el);
-    const family = cs.fontFamily.split(",")[0].replace(/["']/g, "").trim();
+    const painted = resolvePaintedFont(cs.fontFamily, sampleText, cs.fontWeight, cs.fontStyle);
+    const family = painted && painted.primary;
     if (!family) return null;
     const color = toHex(cs.color);
     const bold = isBoldStyle(el, cs);
     const properties = [{ value: family }];
+    if (painted.fallbacks.length) {
+      properties.push({
+        value: painted.fallbacks.join(", "),
+        before: " (",
+        after: " for some characters)",
+        adjacent: true,
+      });
+    }
     if (!bold) properties.push({ value: cs.fontWeight });
     properties.push({ value: cs.fontSize, copy: numericCopyValue(cs.fontSize) }, { value: color });
     const styles = [];
@@ -572,9 +919,9 @@
     if (!el || isGlyphUI(el) || isEditingTarget(el)) return null;
     const rect = range.getBoundingClientRect();
     if (rect.width < 1 && rect.height < 1) return null;
-    const content = fontContentFromElement(el);
-    if (!content) return null;
     const sampleText = truncateSampleText(String(sel));
+    const content = fontContentFromElement(el, String(sel));
+    if (!content) return null;
     if (sampleText) content.sampleText = sampleText;
     return { content, rect };
   }
@@ -624,7 +971,7 @@
     if (selectionRememberTimer) clearTimeout(selectionRememberTimer);
     selectionRememberTimer = setTimeout(() => {
       selectionRememberTimer = 0;
-      rememberResultWithPreview(target.content, previewRect);
+      rememberResultWithPreview(target.content, previewRect, { hideCards: false });
     }, 400);
   }
 
@@ -755,11 +1102,14 @@
   function applyFontSourceButton(host, family, source) {
     let link = host.querySelector(".glyph-card-gfonts");
     const url = source && source.url;
-    host.classList.toggle("glyph-card--has-gfonts", !!url);
     if (!url) {
       if (link) link.remove();
+      // Drop reserved padding only while the card is still unpainted. Once it
+      // is visible, keep the width so the card doesn't resize as it appears.
+      if (host.style.visibility === "hidden") host.classList.remove("glyph-card--has-gfonts");
       return;
     }
+    host.classList.add("glyph-card--has-gfonts");
     if (!link) {
       link = document.createElement("a");
       link.className = "glyph-card-gfonts";
@@ -849,28 +1199,108 @@
     }
   }
 
-  async function rememberResultWithPreview(content, rect) {
+  async function rememberResultWithPreview(content, rect, options) {
     if (!(await historySavingEnabled())) return;
     let preview = "";
     try {
-      preview = await captureRegionPreview(rect);
+      preview = await captureRegionPreview(rect, options);
     } catch (err) {
       preview = "";
     }
     await rememberResult(content, preview);
   }
 
-  function formatIdentifyResult(data) {
+  function sampleTextColor(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          resolve(textHexFromImage(img));
+        } catch (err) {
+          resolve("");
+        }
+      };
+      img.onerror = () => resolve("");
+      img.src = dataUrl;
+    });
+  }
+
+  function textHexFromImage(img) {
+    const canvas = document.createElement("canvas");
+    const w = Math.max(1, Math.min(img.width, 160));
+    const h = Math.max(1, Math.min(img.height, 160));
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "";
+    ctx.drawImage(img, 0, 0, w, h);
+    const pixels = ctx.getImageData(0, 0, w, h).data;
+    const counts = new Map();
+    for (let i = 0; i < pixels.length; i += 16) {
+      if (pixels[i + 3] < 200) continue;
+      const r = pixels[i] & 0xf0;
+      const g = pixels[i + 1] & 0xf0;
+      const b = pixels[i + 2] & 0xf0;
+      const key = (r << 16) | (g << 8) | b;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    if (!ranked.length) return "";
+    if (ranked.length === 1) return hexFromQuantized(ranked[0][0]);
+    const bgLum = lumFromQuantized(ranked[0][0]);
+    let best = null;
+    let bestScore = 0;
+    for (let i = 1; i < ranked.length && i < 8; i++) {
+      const contrast = Math.abs(lumFromQuantized(ranked[i][0]) - bgLum);
+      const score = ranked[i][1] * contrast;
+      if (contrast > 0.12 && score > bestScore) {
+        bestScore = score;
+        best = ranked[i][0];
+      }
+    }
+    return best == null ? "" : hexFromQuantized(best);
+  }
+
+  function lumFromQuantized(key) {
+    const channels = [(key >> 16) & 0xff, (key >> 8) & 0xff, key & 0xff].map((c) => {
+      const x = c / 255;
+      return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  }
+
+  function hexFromQuantized(key) {
+    const fill = (n) => {
+      const hi = n & 0xf0;
+      return (hi | (hi >> 4)).toString(16).padStart(2, "0");
+    };
+    return "#" + fill(key >> 16) + fill(key >> 8) + fill(key & 0xff);
+  }
+
+  function formatIdentifyResult(data, sampledColor) {
     const font = data?.font || "Unknown";
-    const props = [{ value: font }];
+    const properties = [{ value: font }];
     if (typeof data?.confidence === "number") {
-      props.push({
+      properties.push({
         value: `${Math.round(data.confidence * 100)}% match`,
         before: " (",
         after: ")",
       });
     }
-    return { properties: props };
+    const weight = Number(data?.weight) || 0;
+    const bold = weight >= 500;
+    if (!bold && weight) properties.push({ value: String(weight) });
+    const size = Number(data?.size) || 0;
+    if (size) properties.push({ value: size + "px", copy: String(size) });
+    const color = sampledColor || data?.color || "";
+    if (color) properties.push({ value: color });
+    const styles = [];
+    if (bold) styles.push({ letter: "B", title: "Bold", kind: "bold" });
+    if (data?.italic) styles.push({ letter: "I", title: "Italic", kind: "italic" });
+    if (data?.underline) styles.push({ letter: "U", title: "Underline", kind: "underline" });
+    const content = { properties, styles };
+    if (color) content.swatchColor = color;
+    return content;
   }
 
   async function copyText(text) {
@@ -967,12 +1397,53 @@
 
   function showCard(x, y, content, options) {
     document.querySelectorAll(".glyph-card").forEach((n) => n.remove());
-    card = document.createElement("div");
-    card.className = "glyph-card" + (darkTheme ? " glyph-card--dark" : "");
+    card = buildCard(content, options);
+    placeCard(card, x, y + 12);
+    if (options && options.hidden) card.style.visibility = "hidden";
+    document.body.appendChild(card);
+    if (card.getBoundingClientRect().top < 32) card.classList.add("glyph-card--copy-below");
+  }
+
+  function showResultCards(x, y, contents) {
+    document.querySelectorAll(".glyph-card").forEach((n) => n.remove());
+    const nodes = contents.map((content) => buildCard(content, { stack: true }));
+    const left = Math.min(x, window.innerWidth - 280);
+    let top = y + 12;
+    nodes.forEach((node) => {
+      node.style.left = left + "px";
+      node.style.top = top + "px";
+      document.body.appendChild(node);
+      top += node.getBoundingClientRect().height + 8;
+    });
+    const overflow = top - (window.innerHeight - 8);
+    if (overflow > 0) {
+      nodes.forEach((node) => {
+        node.style.top = Math.max(8, parseFloat(node.style.top) - overflow) + "px";
+      });
+    }
+    nodes.forEach((node) => {
+      if (node.getBoundingClientRect().top < 32) node.classList.add("glyph-card--copy-below");
+    });
+    card = nodes[0] || null;
+  }
+
+  function placeCard(node, x, y) {
+    node.style.left = Math.min(x, window.innerWidth - 280) + "px";
+    node.style.top = Math.min(y, window.innerHeight - 80) + "px";
+  }
+
+  function buildCard(content, options) {
+    const node = document.createElement("div");
+    node.className = "glyph-card" + (darkTheme ? " glyph-card--dark" : "");
+    // Hold the source-link slot before the first paint so the card doesn't
+    // grow when that button arrives.
+    if (options && options.hidden && canResolveFontSource(fontNameFromContent(content))) {
+      node.classList.add("glyph-card--has-gfonts");
+    }
 
     const body = document.createElement("span");
     body.className = "glyph-card-body";
-    card.appendChild(body);
+    node.appendChild(body);
     fillCardBody(body, content);
 
     const keepTool = !!(options && options.keepTool);
@@ -983,6 +1454,13 @@
     close.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (options && options.stack) {
+        node.remove();
+        const rest = document.querySelectorAll(".glyph-card");
+        if (!rest.length) cleanup();
+        else if (card === node) card = rest[0];
+        return;
+      }
       if (keepTool && !mode) {
         dismissSelectionCard();
         const sel = window.getSelection();
@@ -991,12 +1469,9 @@
       }
       cleanup();
     });
-    card.appendChild(close);
-    syncFontSourceButton(card, content);
-    card.style.left = Math.min(x, window.innerWidth - 280) + "px";
-    card.style.top = Math.min(y + 12, window.innerHeight - 80) + "px";
-    document.body.appendChild(card);
-    if (card.getBoundingClientRect().top < 32) card.classList.add("glyph-card--copy-below");
+    node.appendChild(close);
+    node._glyphSourceReady = syncFontSourceButton(node, content);
+    return node;
   }
 
   function updateCard(content) {

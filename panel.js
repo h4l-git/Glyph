@@ -4,10 +4,11 @@
  * Chrome paints its native action popup onto an opaque surface, so the popup
  * can never have a transparent backdrop. To get a floating rounded card, the
  * toolbar button instead injects this script, which embeds popup.html inside a
- * transparent iframe pinned to the top-right of the page. The iframe is an
+ * transparent iframe pinned to a corner of the page. The iframe is an
  * extension-origin document, so the page cannot read anything inside it.
+ * Which corner is chosen in Settings and stored as "panelCorner".
  *
- * A grip in the bottom-left corner lets the panel be resized by dragging; the
+ * A grip on the opposite corner lets the panel be resized by dragging; the
  * chosen size is stored and reused. Double-clicking the grip restores the
  * automatic size, where the panel follows the height of its content.
  *
@@ -20,13 +21,24 @@
   const RADIUS = 12;
   const MARGIN = 8;
   const STORAGE_KEY = "panelSize";
+  const CORNER_KEY = "panelCorner";
+  const CORNERS = {
+    "top-left": { top: true, left: true },
+    "top-right": { top: true, left: false },
+    "bottom-left": { top: false, left: true },
+    "bottom-right": { top: false, left: false },
+  };
+  const DEFAULT_CORNER = "top-right";
   const EXT_ORIGIN = chrome.runtime.getURL("").replace(/\/$/, "");
 
   if (!window.__glyphPanel) {
     let host = null;
     let wrap = null;
     let iframe = null;
+    let grip = null;
+    let corner = DEFAULT_CORNER;
     let manualSize = null; // { w, h } once the user has resized, else null
+    let pendingOpen = false;
 
     const clampSize = (w, h) => ({
       w: Math.round(Math.min(Math.max(w, MIN_WIDTH), window.innerWidth - MARGIN * 2)),
@@ -53,10 +65,29 @@
         // Content-driven height only while the user hasn't chosen a size.
         if (!manualSize) iframe.style.height = `${Math.max(0, Math.ceil(data.height))}px`;
       } else if (data.type === "GLYPH_PANEL_READY") {
+        applyCorner();
         applySize();
+      } else if (data.type === "GLYPH_PANEL_CORNER" && CORNERS[data.corner]) {
+        corner = data.corner;
+        applyCorner();
       } else if (data.type === "GLYPH_PANEL_CLOSE") {
         close();
       }
+    };
+
+    const applyCorner = () => {
+      if (!host) return;
+      const spec = CORNERS[corner] || CORNERS[DEFAULT_CORNER];
+      const name = CORNERS[corner] ? corner : DEFAULT_CORNER;
+      host.style.top = spec.top ? `${MARGIN}px` : "auto";
+      host.style.bottom = spec.top ? "auto" : `${MARGIN}px`;
+      host.style.left = spec.left ? `${MARGIN}px` : "auto";
+      host.style.right = spec.left ? "auto" : `${MARGIN}px`;
+      if (grip) {
+        grip.classList.remove("grip-tl", "grip-tr", "grip-bl", "grip-br");
+        grip.classList.add(`grip-${spec.top ? "b" : "t"}${spec.left ? "r" : "l"}`);
+      }
+      postToFrame({ type: "GLYPH_PANEL_CORNER", corner: name });
     };
 
     const onPointerDown = (event) => {
@@ -104,8 +135,12 @@
 
       grip.addEventListener("pointermove", (event) => {
         if (!drag || event.pointerId !== drag.pointerId || event.buttons === 0) return;
-        // Anchored top-right: dragging left widens, dragging down lengthens.
-        manualSize = clampSize(drag.w + (drag.x - event.clientX), drag.h + (event.clientY - drag.y));
+        // The grip sits on the free corner, so dragging away from the anchor grows the panel.
+        const spec = CORNERS[corner] || CORNERS[DEFAULT_CORNER];
+        manualSize = clampSize(
+          drag.w + (spec.left ? event.clientX - drag.x : drag.x - event.clientX),
+          drag.h + (spec.top ? event.clientY - drag.y : drag.y - event.clientY)
+        );
         applySize();
       });
 
@@ -132,10 +167,25 @@
     }
 
     async function open() {
+      if (host || pendingOpen) return;
+      pendingOpen = true;
+      try {
+        const stored = await chrome.storage.local.get([STORAGE_KEY, CORNER_KEY]);
+        const size = stored[STORAGE_KEY];
+        if (size && typeof size.w === "number" && typeof size.h === "number") {
+          manualSize = clampSize(size.w, size.h);
+        }
+        if (CORNERS[stored[CORNER_KEY]]) corner = stored[CORNER_KEY];
+      } catch (err) {
+        manualSize = null;
+      }
+      if (!pendingOpen) return;
+      pendingOpen = false;
       if (host) return;
+
       host = document.createElement("div");
       host.setAttribute("data-glyph-panel", "");
-      host.style.cssText = `all: initial; position: fixed; top: ${MARGIN}px; right: ${MARGIN}px; z-index: 2147483647;`;
+      host.style.cssText = "all: initial; position: fixed; z-index: 2147483647;";
       const shadow = host.attachShadow({ mode: "closed" });
 
       const style = document.createElement("style");
@@ -162,26 +212,28 @@
         }
         .grip {
           position: absolute;
-          left: 0;
-          bottom: 0;
+          /* Keep in sync with --grip-size in popup.css so menu controls
+             stay clear of this hit target. */
           width: 22px;
           height: 22px;
           margin: 0;
-          padding: 0 0 4px 4px;
           border: 0;
           background: transparent;
           color: rgba(128, 128, 128, 0.55);
-          cursor: nesw-resize;
           display: flex;
-          align-items: flex-end;
-          justify-content: flex-start;
           touch-action: none;
           -webkit-user-select: none;
           user-select: none;
         }
+        .grip-bl { left: 0; bottom: 0; padding: 0 0 4px 4px; cursor: nesw-resize; align-items: flex-end; justify-content: flex-start; }
+        .grip-br { right: 0; bottom: 0; padding: 0 4px 4px 0; cursor: nwse-resize; align-items: flex-end; justify-content: flex-end; }
+        .grip-tl { left: 0; top: 0; padding: 4px 0 0 4px; cursor: nwse-resize; align-items: flex-start; justify-content: flex-start; }
+        .grip-tr { right: 0; top: 0; padding: 4px 4px 0 0; cursor: nesw-resize; align-items: flex-start; justify-content: flex-end; }
+        .grip-bl svg { transform: scaleX(-1); }
+        .grip-tl svg { transform: scale(-1, -1); }
+        .grip-tr svg { transform: scaleY(-1); }
         .grip:hover, .resizing .grip { color: rgba(128, 128, 128, 0.95); }
         .grip:focus-visible { outline: 2px solid #7FC4BB; outline-offset: -2px; border-radius: 4px; }
-        .grip svg { transform: scaleX(-1); }
       `;
 
       wrap = document.createElement("div");
@@ -193,28 +245,23 @@
       iframe.setAttribute("allow", "clipboard-write");
       iframe.title = "Glyph";
 
+      grip = buildGrip();
       wrap.appendChild(iframe);
-      wrap.appendChild(buildGrip());
+      wrap.appendChild(grip);
       shadow.appendChild(style);
       shadow.appendChild(wrap);
+      applyCorner();
       (document.body || document.documentElement).appendChild(host);
 
       window.addEventListener("message", onMessage);
       document.addEventListener("pointerdown", onPointerDown, true);
       document.addEventListener("keydown", onKeyDown, true);
 
-      try {
-        const stored = (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY];
-        if (stored && typeof stored.w === "number" && typeof stored.h === "number") {
-          manualSize = clampSize(stored.w, stored.h);
-        }
-      } catch (err) {
-        manualSize = null;
-      }
-      if (host) applySize();
+      applySize();
     }
 
     function close() {
+      pendingOpen = false;
       if (!host) return;
       window.removeEventListener("message", onMessage);
       document.removeEventListener("pointerdown", onPointerDown, true);
@@ -223,11 +270,12 @@
       host = null;
       wrap = null;
       iframe = null;
+      grip = null;
     }
 
     window.__glyphPanel = {
       toggle() {
-        if (host) close();
+        if (host || pendingOpen) close();
         else open();
       },
     };

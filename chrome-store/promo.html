@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Glyph promo tiles</title>
+<script>document.documentElement.className = location.search.indexOf("marquee") !== -1 ? "is-marquee" : "is-small";</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,560&family=Inter:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow: hidden; background: #7FC4BB; }
+  html.is-small, html.is-small body { width: 440px; height: 280px; }
+  html.is-marquee, html.is-marquee body { width: 1400px; height: 560px; }
+  body {
+    font-family: Fraunces, Georgia, serif;
+    color: #6B4F30;
+  }
+  .tile { width: 100%; height: 100%; }
+  .panel-small, .panel-marquee { display: none; }
+  html.is-small .panel-small { display: flex; }
+  html.is-marquee .panel-marquee { display: flex; }
+
+  .panel-small {
+    height: 280px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .panel-small .eye { width: 168px; height: auto; }
+  .panel-small .name {
+    font-size: 44px;
+    font-weight: 560;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .panel-marquee {
+    height: 560px;
+    align-items: center;
+    justify-content: center;
+    gap: 72px;
+    padding: 0 72px;
+  }
+  .panel-marquee .eye { width: 340px; height: auto; flex: 0 0 auto; }
+  .copy { display: flex; flex-direction: column; align-items: flex-start; }
+  .panel-marquee .name {
+    font-size: 108px;
+    font-weight: 560;
+    letter-spacing: -0.03em;
+    line-height: 0.9;
+  }
+  .tag {
+    margin-top: 16px;
+    font-family: Inter, sans-serif;
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: #4A3620;
+  }
+  .card {
+    margin-top: 36px;
+    background: #efe4cf;
+    color: #1a1a18;
+    border-radius: 14px;
+    padding: 14px 18px;
+    font-family: Inter, sans-serif;
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.2;
+    box-shadow: 0 10px 28px rgba(36, 30, 21, 0.12);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mark {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 15px;
+    font-weight: 560;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: rgba(107, 79, 48, 0.12);
+    color: #6B4F30;
+  }
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    background: #241e15;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+  }
+</style>
+</head>
+<body>
+  <div class="tile panel-small">
+    <svg class="eye" viewBox="0 0 60 52" fill="none" aria-hidden="true">
+      <path d="M8 14 C16 6 30 4 42 8 C48 10 52 12.5 54 14" stroke="#6B4F30" stroke-width="3.2" stroke-linecap="square"/>
+      <path d="M9 24 C17 17 26 14.5 33 15 C41 15.7 48 19 53 23 C48 26.5 41 29 33 29 C25 29 16 27.5 9 24 Z" stroke="#6B4F30" stroke-width="3" stroke-linejoin="miter"/>
+      <ellipse cx="30" cy="21.5" rx="6.2" ry="5.6" fill="#6B4F30"/>
+      <path d="M53 23 C56 21.5 58 20 59 18.5" stroke="#6B4F30" stroke-width="2.8" stroke-linecap="square"/>
+      <path d="M13 26 C14.5 29.5 14.8 33 13 36.5 L9 44 C13.5 40 17 34.5 17.8 28.8" stroke="#6B4F30" stroke-width="2.4" stroke-linejoin="miter" fill="#6B4F30"/>
+      <path d="M22 28.2 C27 36.5 33.5 42.5 40 44.5 C44 45.5 47 44.5 48 42 C49 39.5 47.5 37 45 36.5 C43 36.1 41.3 37.2 41 39 C40.8 40.4 41.8 41.6 43.2 41.7" stroke="#6B4F30" stroke-width="2.8" stroke-linecap="square"/>
+    </svg>
+    <p class="name">Glyph</p>
+  </div>
+
+  <div class="tile panel-marquee">
+    <svg class="eye" viewBox="0 0 60 52" fill="none" aria-hidden="true">
+      <path d="M8 14 C16 6 30 4 42 8 C48 10 52 12.5 54 14" stroke="#6B4F30" stroke-width="3.2" stroke-linecap="square"/>
+      <path d="M9 24 C17 17 26 14.5 33 15 C41 15.7 48 19 53 23 C48 26.5 41 29 33 29 C25 29 16 27.5 9 24 Z" stroke="#6B4F30" stroke-width="3" stroke-linejoin="miter"/>
+      <ellipse cx="30" cy="21.5" rx="6.2" ry="5.6" fill="#6B4F30"/>
+      <path d="M53 23 C56 21.5 58 20 59 18.5" stroke="#6B4F30" stroke-width="2.8" stroke-linecap="square"/>
+      <path d="M13 26 C14.5 29.5 14.8 33 13 36.5 L9 44 C13.5 40 17 34.5 17.8 28.8" stroke="#6B4F30" stroke-width="2.4" stroke-linejoin="miter" fill="#6B4F30"/>
+      <path d="M22 28.2 C27 36.5 33.5 42.5 40 44.5 C44 45.5 47 44.5 48 42 C49 39.5 47.5 37 45 36.5 C43 36.1 41.3 37.2 41 39 C40.8 40.4 41.8 41.6 43.2 41.7" stroke="#6B4F30" stroke-width="2.8" stroke-linecap="square"/>
+    </svg>
+    <div class="copy">
+      <p class="name">Glyph</p>
+      <p class="tag">Find any font, instantly.</p>
+      <p class="card"><span>Fraunces</span><span class="mark">B</span><span>52px</span><span class="swatch"></span></p>
+    </div>
+  </div>
+</body>
+</html>

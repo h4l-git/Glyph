@@ -74,7 +74,7 @@ li { margin-bottom: 6px; }
 
   <h2>What Glyph accesses</h2>
   <ul>
-    <li><strong>Page content, only when you start a tool or enable text selection.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, use the keyboard shortcut, or turn on "Show card on text selection" in Settings. With that setting off, it does not run in the background or read pages automatically.</li>
+    <li><strong>Page content, only when you start a tool or enable text selection.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, use a keyboard shortcut, or turn on "Show card on text selection" in Settings. With that setting off, it does not run in the background or read pages automatically.</li>
     <li><strong>Snip tool:</strong> captures a screenshot of the region you select, so the image can be sent to Anthropic for font identification.</li>
     <li><strong>Highlight tool:</strong> reads the computed CSS (font family, weight, size) of the element you click. This never leaves your device - it's shown directly in the result card.</li>
     <li><strong>Text selection (optional):</strong> if you enable it in Settings, Glyph reads the computed CSS of text you highlight with your cursor and shows the same result card. Chrome will ask for permission to run on websites you visit. You can turn this off at any time.</li>
@@ -85,7 +85,8 @@ li { margin-bottom: 6px; }
   <ul>
     <li>Your Anthropic API key, if you choose to add one</li>
     <li>Your light/dark theme preference</li>
-    <li>Your keyboard shortcut setting</li>
+    <li>Your keyboard shortcut settings</li>
+    <li>Which corner the window opens in</li>
     <li>Whether "Show card on text selection" is enabled</li>
     <li>A short local cache of font-source lookups (family name → official page URL) and catalog indexes, used only to resolve download/specimen links</li>
   </ul>
