@@ -280,9 +280,12 @@ html[data-panel-fill] .hidden { display: none; }
   margin-bottom: 6px;
 }
 
+.api-key-row {
+  position: relative;
+}
 #api-key {
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 36px 8px 10px;
   border: 0.5px solid var(--border);
   border-radius: 8px;
   background: transparent;
@@ -291,6 +294,40 @@ html[data-panel-fill] .hidden { display: none; }
   font-family: inherit;
 }
 #api-key:focus { outline: 2px solid var(--turquoise); outline-offset: -1px; }
+
+.api-key-copy {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+.api-key-copy:hover { background: var(--hover); color: var(--text); }
+.api-key-copy:focus-visible { outline: 2px solid var(--turquoise); outline-offset: -2px; }
+.api-key-copy:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+.api-key-copy svg { display: block; }
+.api-key-copy .api-key-copy-check { display: none; }
+.api-key-copy--done,
+.api-key-copy--done:hover {
+  background: var(--turquoise);
+  color: #1a1a18;
+}
+.api-key-copy--done .api-key-copy-icon { display: none; }
+.api-key-copy--done .api-key-copy-check { display: block; }
 
 .field-hint {
   font-size: 12px;
@@ -313,26 +350,33 @@ html[data-panel-fill] .hidden { display: none; }
 .field-link:hover { text-decoration: underline; }
 .field-link:focus-visible { outline: 2px solid var(--turquoise); outline-offset: 2px; }
 
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: calc(10px * var(--ui-scale));
+}
 .save {
-  margin-top: calc(12px * var(--ui-scale));
-  width: 100%;
-  padding: calc(8px * var(--ui-scale)) 0;
+  align-self: flex-start;
+  width: auto;
+  padding: calc(4px * var(--ui-scale)) calc(12px * var(--ui-scale));
   border: none;
-  border-radius: calc(8px * var(--ui-scale));
+  border-radius: calc(7px * var(--ui-scale));
   background: var(--bronze);
   color: #fff;
-  font-size: calc(13px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
   font-weight: 500;
   font-family: inherit;
+  line-height: 1.35;
   cursor: pointer;
 }
 .save:hover { filter: brightness(1.1); }
+.save:focus-visible { outline: 2px solid var(--turquoise); outline-offset: 2px; }
 
 .save-note {
-  margin-top: 8px;
+  margin: 0;
   font-size: 12px;
   color: var(--text-secondary);
-  text-align: center;
 }
 
 .toggle-row {

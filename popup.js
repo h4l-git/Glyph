@@ -3,6 +3,7 @@ const settings = document.getElementById("panel-settings");
 const history = document.getElementById("panel-history");
 const historyList = document.getElementById("history-list");
 const apiKeyInput = document.getElementById("api-key");
+const btnCopyApiKey = document.getElementById("btn-copy-api-key");
 const saveNote = document.getElementById("save-note");
 const btnTheme = document.getElementById("btn-theme");
 const errorNote = document.getElementById("error-note");
@@ -1076,6 +1077,7 @@ document.getElementById("btn-settings").addEventListener("click", async () => {
   document.querySelector(".popup").scrollTop = 0;
   const { apiKey } = await chrome.storage.local.get("apiKey");
   if (apiKey) apiKeyInput.value = apiKey;
+  syncApiKeyCopy();
   await syncSaveHistoryToggle();
   await syncSelectionCardToggle();
   const commands = await chrome.commands.getAll();
@@ -1101,8 +1103,36 @@ document.getElementById("btn-back").addEventListener("click", () => {
   document.querySelector(".popup").scrollTop = 0;
 });
 
+function syncApiKeyCopy() {
+  if (!btnCopyApiKey || !apiKeyInput) return;
+  const empty = !apiKeyInput.value.trim();
+  btnCopyApiKey.disabled = empty;
+  if (!btnCopyApiKey.classList.contains("api-key-copy--done")) {
+    btnCopyApiKey.title = empty ? "Nothing to copy" : "Copy API key";
+    btnCopyApiKey.setAttribute("aria-label", "Copy API key");
+  }
+}
+
+if (apiKeyInput) apiKeyInput.addEventListener("input", syncApiKeyCopy);
+
+if (btnCopyApiKey) {
+  btnCopyApiKey.addEventListener("click", async () => {
+    const value = apiKeyInput.value.trim();
+    if (!value || !(await copyText(value))) return;
+    btnCopyApiKey.classList.add("api-key-copy--done");
+    btnCopyApiKey.title = "Copied";
+    btnCopyApiKey.setAttribute("aria-label", "API key copied");
+    clearTimeout(btnCopyApiKey._glyphCopyTimer);
+    btnCopyApiKey._glyphCopyTimer = setTimeout(() => {
+      btnCopyApiKey.classList.remove("api-key-copy--done");
+      syncApiKeyCopy();
+    }, 1200);
+  });
+}
+
 document.getElementById("btn-save").addEventListener("click", async () => {
   await chrome.storage.local.set({ apiKey: apiKeyInput.value.trim() });
+  syncApiKeyCopy();
   saveNote.classList.remove("hidden");
   setTimeout(() => saveNote.classList.add("hidden"), 1500);
 });
