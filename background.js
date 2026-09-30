@@ -1,4 +1,9 @@
 importScripts("fontSource.js");
+try {
+  importScripts("wfiKey.js");
+} catch (err) {
+  // wfiKey.js is local. Snip stays off until that file defines WFI_API_KEY.
+}
 
 const BADGE_TEXT = { snip: "✂", highlight: "🖍" };
 const SELECTION_CARD_KEY = "selectionCard";
@@ -34,7 +39,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === "GLYPH_IDENTIFY") {
-    identifyWithClaude(msg.image).then(sendResponse);
+    identifySnip(msg.image, msg.fallbackImage).then(sendResponse);
     return true;
   }
 });
@@ -238,6 +243,120 @@ async function identifyWithClaude(dataUrl) {
     return { error: "failed" };
   }
   return parseFontGuess(body) || { error: "failed" };
+}
+
+const WFI_URL = "https://www.whatfontis.com/api2/index.php";
+const WFI_LIMIT = 4;
+
+function matchFamilyName(value) {
+  const name = String(value || "").replace(/["']/g, "").replace(/\s+/g, " ").trim();
+  if (!name || FONT_CATEGORY.test(name)) return "";
+  return name;
+}
+
+function whatFontIsPage(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:") return "";
+    if (url.hostname !== "www.whatfontis.com" && url.hostname !== "whatfontis.com") return "";
+    return url.href;
+  } catch (err) {
+    return "";
+  }
+}
+
+function wfiErrorFrom(status, body) {
+  const text = String(body || "").toLowerCase();
+  if (status === 409) return "wfi_unauthorized";
+  if (status === 402 || status === 429) return "wfi_quota";
+  if (status === 420 || status === 503 || status >= 500) return "wfi_down";
+  if (status === 422) {
+    if (text.includes("mysql") || text.includes("server error")) return "wfi_down";
+    if (text.includes("size") || text.includes("large") || text.includes("type")) return "wfi_image";
+    return "no_chars";
+  }
+  return "wfi_failed";
+}
+
+function parseWfiMatches(parsed) {
+  const list = Array.isArray(parsed)
+    ? parsed
+    : (parsed && Array.isArray(parsed.results) ? parsed.results : null);
+  if (!list) return null;
+  const fonts = [];
+  const seen = new Set();
+  for (const item of list) {
+    const font = matchFamilyName(item && item.title);
+    if (!font) continue;
+    const key = font.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    fonts.push({
+      font,
+      matchUrl: whatFontIsPage(item && item.url),
+      license: item && (item.type === "Free" || item.type === "Commercial") ? item.type : "",
+    });
+    if (fonts.length === WFI_LIMIT) break;
+  }
+  if (!fonts.length) return null;
+  const [primary, ...rest] = fonts;
+  primary.similars = rest.map((face) => face.font);
+  return { fonts: [primary], engine: "whatfontis" };
+}
+
+async function identifyWithWhatFontIs(dataUrl) {
+  const key = (typeof WFI_API_KEY === "string" ? WFI_API_KEY : "").trim();
+  if (!key) return { error: "no_wfi_key" };
+  const image = splitDataUrl(dataUrl);
+  if (!image) return { error: "bad_image" };
+  // Same envelope the WhatFontIs clients post as multipart field "file".
+  // The crop is already the text, so skip their text-box search.
+  const envelope = {
+    FONT: {
+      API_KEY: key,
+      BASE64: 1,
+      WANT_QUOTA: 1,
+      INFO: {
+        urlimagebase64: image.data,
+        NOTTEXTBOXSDETECTION: 1,
+        limit: WFI_LIMIT,
+      },
+    },
+  };
+  const form = new FormData();
+  form.append("file", JSON.stringify(envelope));
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  let resp;
+  try {
+    resp = await fetch(WFI_URL, { method: "POST", body: form, signal: ctrl.signal });
+  } catch (err) {
+    return { error: "wfi_network" };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const bodyText = await resp.text();
+  if (!resp.ok) return { error: wfiErrorFrom(resp.status, bodyText) };
+
+  let parsed;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch (err) {
+    return { error: "wfi_failed" };
+  }
+  return parseWfiMatches(parsed) || { error: "no_chars" };
+}
+
+async function identifySnip(image, fallbackImage) {
+  const matched = await identifyWithWhatFontIs(image);
+  if (!matched.error) return matched;
+  if (matched.error !== "no_chars" || !fallbackImage) return matched;
+  const guessed = await identifyWithClaude(fallbackImage);
+  if (guessed.error === "no_key") return matched;
+  if (guessed.error) return guessed;
+  return { ...guessed, engine: "claude", fallback: true };
 }
 
 const RESTRICTED_URL_PREFIXES = ["chrome://", "chrome-extension://", "edge://", "about:", "https://chrome.google.com/webstore", "https://chromewebstore.google.com"];

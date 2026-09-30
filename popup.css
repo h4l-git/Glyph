@@ -435,7 +435,7 @@ html[data-panel-fill] .menu:has(.ai-menu:not(.hidden)) { overflow: visible; }
 .api-key-row {
   position: relative;
 }
-#api-key {
+.api-key-input {
   width: 100%;
   padding: 8px 36px 8px 10px;
   border: 0.5px solid var(--border);
@@ -445,7 +445,7 @@ html[data-panel-fill] .menu:has(.ai-menu:not(.hidden)) { overflow: visible; }
   font-size: 13px;
   font-family: inherit;
 }
-#api-key:focus { outline: 2px solid var(--turquoise); outline-offset: -1px; }
+.api-key-input:focus { outline: 2px solid var(--turquoise); outline-offset: -1px; }
 
 .api-key-copy {
   position: absolute;

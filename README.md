@@ -4,7 +4,7 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 
 ## Features
 
-- **Snip tool** (beta) — draw a box around any text on the page, including text in images, and Glyph sends that region to Claude to identify the font. Choose the model from the menu on the Snip row: Haiku 4.5 (fast), Sonnet 5 (balanced, the default), Opus 5.5, or Fable 5.1.
+- **Snip tool** (beta) — draw a box around any text on the page, including text in images. Glyph sends that region to WhatFontIs and shows the closest catalog match, plus a few similar faces. If the letters overlap and an Anthropic key is saved, Glyph asks Claude to guess instead. The model for that fallback is chosen from the menu on the Snip row: Haiku 4.5 (fast), Sonnet 5 (balanced, the default), Opus 5.5, or Fable 5.1.
 - **Highlight tool** — hover and click any element on the page to read off its font family, weight, and size directly from the computed styles.
 - **Text selection** — turn on "Show card on text selection" in Settings to get the same result card when you highlight text with your cursor, without starting the Highlight tool.
 - **History** — recent identifications, with copyable details, a preview, and a link back to the page. Save fonts you want to keep. New history can be turned off in Settings; fonts you have already saved stay either way.
@@ -24,7 +24,7 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 ## Usage
 
 1. Click the Glyph icon in your toolbar.
-2. Choose **Snip tool** to drag-select a region of the page, or **Highlight tool** to click directly on text. For Snip, pick a Claude model from the badge on that row if you want something other than Sonnet 5.
+2. Choose **Snip tool** to drag-select a region of the page, or **Highlight tool** to click directly on text. Snip uses the WhatFontIs key in `wfiKey.js`. The badge on the Snip row picks the Claude model used only when WhatFontIs can't separate the letters, and only if an Anthropic key is saved.
 3. The tool stays active after each result so you can check several fonts in a row. Right-click or press `Esc` to finish.
 4. Results appear in a small card on the page, with the identified font (Snip) or the live computed font details (Highlight). Open **History** to review, preview, copy, or save them.
 
@@ -34,7 +34,8 @@ Find any font, instantly. Glyph is a Chrome extension that lets you snip or high
 
 Open **Settings** from the menu to:
 
-- Add your API key for font identification (used by the Snip tool). It's stored locally on your device via `chrome.storage.local` and never leaves your machine except in requests to Anthropic. You can copy it from the field, or open Anthropic to create one.
+- Put your WhatFontIs API key in `wfiKey.js` (copy `wfiKey.example.js` if that file is missing). Snip uses it for every user. Get one from [WhatFontIs credits](https://www.whatfontis.com/credits.html). `wfiKey.js` is gitignored.
+- Optionally add an Anthropic API key in Settings. Glyph uses it only when WhatFontIs can't separate the letters, and sends that crop and key to Anthropic. Users do not need this for a normal snip.
 - Show a result card when you highlight text with your cursor.
 - Turn saving of new font history on or off.
 - Choose which corner of the page the window opens in.
@@ -49,7 +50,8 @@ Open **Settings** from the menu to:
 | `panel.js` | Injected on toolbar click; shows `popup.html` in a transparent, rounded in-page iframe with a drag-to-resize grip (double-click the grip to reset) |
 | `unavailable.html` / `unavailable.css` / `unavailable.js` | Small native popup shown on pages Chrome won't let extensions run on (New Tab, `chrome://`, Web Store) |
 | `content.js` / `content.css` | Injected into the page to run the Snip and Highlight tools and the optional selection card |
-| `background.js` | Service worker — screenshot capture, Snip identification via Anthropic, keyboard shortcuts, and the mode badge |
+| `background.js` | Service worker — screenshot capture, Snip identification via WhatFontIs (Claude as fallback), keyboard shortcuts, and the mode badge |
+| `wfiKey.js` | Your WhatFontIs API key, gitignored. Copy from `wfiKey.example.js` |
 | `fontSource.js` | Looks up an official specimen or download page for an identified family |
 | `icons/` | Toolbar and store icons |
 | `docs/` | Landing page and privacy policy, served via GitHub Pages |
@@ -58,8 +60,9 @@ Open **Settings** from the menu to:
 
 - `activeTab` — required to inject the Snip/Highlight tools into the page you're currently viewing.
 - `scripting` — required to run `panel.js`, `content.js`, and `content.css` on demand.
-- `storage` — required to save your API key, theme, model choice, history, and other settings locally.
-- Host access to `api.anthropic.com` — required so the Snip tool can send the cropped image and your API key to Claude.
+- `storage` — required to save your API keys, theme, model choice, history, and other settings locally.
+- Host access to `www.whatfontis.com` — required so the Snip tool can send the cropped image with the WhatFontIs key in `wfiKey.js`.
+- Host access to `api.anthropic.com` — required so Snip can fall back to Claude when WhatFontIs can't separate the letters.
 - Host access to Google Fonts, Fontsource, Fontshare, Adobe Fonts, and Font Squirrel — required to resolve an official page for an identified family, and to load a live sample when you preview a Google Font in History.
 - Optional access to websites — requested only if you enable "Show card on text selection", so Glyph can identify fonts when you highlight text.
 

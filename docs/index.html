@@ -149,6 +149,44 @@ h1 em { font-style: italic; color: var(--turquoise-deep); }
   margin-bottom: 32px;
 }
 .cta-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.powered { margin-top: 28px; }
+.powered-kicker {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--turquoise-deep);
+  font-weight: 500;
+}
+.powered-logos {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.logo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 176px;
+  height: 76px;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 12px;
+  border: 0.5px solid rgba(36, 30, 21, 0.08);
+  box-shadow: 0 8px 18px rgba(36, 30, 21, 0.04);
+}
+.logo-link:hover { border-color: rgba(107, 79, 48, 0.28); }
+.logo-link img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.powered-and { font-size: 13px; color: var(--muted); }
 .btn {
   display: inline-block;
   padding: 13px 26px;
@@ -331,17 +369,20 @@ h2 {
 
 footer {
   border-top: 0.5px solid rgba(36, 30, 21, 0.1);
-  padding: 40px 6vw;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+  padding: 36px 6vw 32px;
   max-width: 1200px;
   margin: 0 auto;
   font-size: 13px;
   color: var(--muted);
 }
-footer > span:nth-child(2) { text-align: center; }
-footer .footer-links { justify-self: end; }
+.footer-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.footer-row > span:nth-child(2) { text-align: center; }
+.footer-links { justify-self: end; }
 footer .display { font-size: 15px; color: var(--ink); }
 .footer-links { display: flex; gap: 22px; }
 .footer-link {
@@ -357,7 +398,11 @@ footer .display { font-size: 15px; color: var(--ink); }
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding-top: 4vh; }
   .hero-eye { max-width: 300px; order: -1; }
+  .logo-link { width: 148px; height: 64px; padding: 8px 10px; }
+  .powered-logos { gap: 8px; }
   .nav-links a:not(.btn) { display: none; }
+  .footer-row { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .footer-links { justify-self: center; }
   .shot-grid { grid-template-columns: 1fr; }
   .shot-grid figure.is-open {
     width: 100vw;
@@ -499,6 +544,18 @@ html.is-loading { overflow: hidden; }
     <div class="cta-row" id="install">
       <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/glyph/ibioikhlalicigjadkpjfcjhdlkeegnj">Add to Chrome</a>
     </div>
+    <div class="powered">
+      <p class="powered-kicker">Powered by</p>
+      <div class="powered-logos">
+        <a class="logo-link" href="https://www.anthropic.com/claude">
+          <img class="logo-claude" src="claude.svg" width="121" height="26" alt="Anthropic Claude">
+        </a>
+        <span class="powered-and">and</span>
+        <a class="logo-link" href="https://www.whatfontis.com/">
+          <img class="logo-wfi" src="whatfontis.svg" width="145" height="50" alt="WhatFontIs.com">
+        </a>
+      </div>
+    </div>
   </div>
   <div class="hero-eye" aria-hidden="true">
     <svg viewBox="0 0 60 52" fill="none">
@@ -524,7 +581,7 @@ html.is-loading { overflow: hidden; }
           </svg>
         </div>
         <h3>Snip tool</h3>
-        <p>For text trapped in images, screenshots, and posters. Drag a box around it - Glyph reads the letterforms with AI and names the typeface.</p>
+        <p>For text trapped in images, screenshots, and posters. Drag a box around it - Glyph matches the letterforms against a font catalog and names the closest typeface.</p>
       </div>
       <div class="tool-card">
         <div class="icon" aria-hidden="true">
@@ -582,13 +639,14 @@ html.is-loading { overflow: hidden; }
             <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
           </span>
         </button>
-        <figcaption><strong>Snip</strong>Box lettering trapped in an image. Glyph names the typeface.</figcaption>
+        <figcaption><strong>Snip</strong>Box lettering trapped in an image. Glyph matches the typeface.</figcaption>
       </figure>
     </div>
   </div>
 </section>
 
 <footer>
+  <div class="footer-row">
   <span class="display wordmark" aria-label="Glyph">
     <span class="latin-row" aria-hidden="true"><span>G</span><span>l</span><span>y</span><span>p</span><span>h</span></span>
     <span class="hiero-row" aria-hidden="true"><span>&#x133BC;</span><span>&#x130ED;</span><span>&#x131CC;</span><span>&#x132AA;</span><span>&#x13254;</span></span>
@@ -602,6 +660,7 @@ html.is-loading { overflow: hidden; }
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M21.17 8H12"/><path d="M3.95 6.06 8.54 14"/><path d="M10.88 21.94 15.46 14"/></svg>
     </a>
     <a href="privacy/" class="footer-link">Privacy</a>
+  </div>
   </div>
 </footer>
 

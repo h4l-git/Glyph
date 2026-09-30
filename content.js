@@ -12,15 +12,18 @@
   let selectionRememberTimer = 0;
 
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "GLYPH_START") {
-      cleanup();
-      mode = msg.mode;
-      loadTheme();
-      chrome.runtime.sendMessage({ type: "GLYPH_MODE_CHANGED", active: true, mode });
-      if (mode === "snip") startSnip();
-      if (mode === "highlight") startHighlight();
-    }
+    if (msg.type !== "GLYPH_START") return;
+    beginTool(msg.mode);
   });
+
+  function beginTool(next) {
+    cleanup();
+    mode = next;
+    loadTheme();
+    chrome.runtime.sendMessage({ type: "GLYPH_MODE_CHANGED", active: true, mode });
+    if (mode === "snip") startSnip();
+    if (mode === "highlight") startHighlight();
+  }
 
   // The popup stores an explicit "light"/"dark" choice; otherwise follow the system.
   async function loadTheme() {
@@ -205,6 +208,36 @@
     });
   }
 
+  // WhatFontIs matches shapes, and rejects images over a few megabytes.
+  // A JPEG at a modest size stays under that cap without the PNG upscale.
+  function prepareMatchImage(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxLong = 1400;
+        const minShort = 280;
+        const long = Math.max(img.width, img.height, 1);
+        const short = Math.min(img.width, img.height, 1);
+        let scale = short < minShort ? minShort / short : 1;
+        if (long * scale > maxLong) scale = maxLong / long;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", 0.86));
+        } catch (err) {
+          resolve("");
+        }
+      };
+      img.onerror = () => resolve("");
+      img.src = dataUrl;
+    });
+  }
+
   function clampCaptureRect(rect) {
     const x = Math.max(0, rect.x);
     const y = Math.max(0, rect.y);
@@ -235,19 +268,29 @@
       return;
     }
     showCard(rect.x, rect.y, "Identifying font…");
-    const { apiKey } = await chrome.storage.local.get("apiKey");
-    if (!apiKey) {
-      updateCard("No API key set. Add one in Glyph settings.");
-      return;
-    }
+    const stored = await chrome.storage.local.get("apiKey");
     try {
       const [image, sampledColor] = await Promise.all([
-        prepareIdentifyImage(cropped),
+        prepareMatchImage(cropped),
         sampleTextColor(cropped),
       ]);
-      const result = await identifyFont(image || cropped);
+      if (!image) {
+        updateCard("Couldn't capture the screen. Try again.");
+        return;
+      }
+      const fallbackImage = String(stored.apiKey || "").trim()
+        ? await prepareIdentifyImage(cropped)
+        : "";
+      const result = await identifyFont(image, fallbackImage);
       const faces = Array.isArray(result?.fonts) && result.fonts.length ? result.fonts : [result];
-      const formatted = faces.map((face) => formatIdentifyResult(face, faces.length === 1 ? sampledColor : ""));
+      const formatted = result?.engine === "whatfontis"
+        ? [formatMatchResult(faces[0], sampledColor)]
+        : faces.map((face) => formatIdentifyResult(face, faces.length === 1 ? sampledColor : ""));
+      if (result?.fallback) {
+        formatted.forEach((content) => {
+          if (content && content.properties) content.properties.push({ value: "Closest guess" });
+        });
+      }
       showResultCards(rect.x, rect.y, formatted);
       if (await historySavingEnabled()) {
         const preview = await compressPreview(cropped);
@@ -260,8 +303,24 @@
 
   function identifyErrorMessage(err) {
     switch (err && err.code) {
+      case "no_wfi_key":
+        return "Snip isn't available right now.";
+      case "wfi_unauthorized":
+        return "That WhatFontIs key was rejected. Check it in Glyph settings.";
+      case "wfi_quota":
+        return "WhatFontIs limit reached. Top up, or try again tomorrow.";
+      case "no_chars":
+        return "Couldn't separate the letters. Try a clearer line of text.";
+      case "wfi_image":
+        return "That crop couldn't be read. Try a tighter box around the letters.";
+      case "wfi_down":
+        return "WhatFontIs is busy. Try again in a moment.";
+      case "wfi_network":
+        return "Couldn't reach WhatFontIs. Try again.";
+      case "wfi_failed":
+        return "Identification failed. Try again.";
       case "no_key":
-        return "No API key set. Add one in Glyph settings.";
+        return "Add an Anthropic API key in Glyph settings to guess when letters overlap.";
       case "unauthorized":
         return "That API key was rejected. Check it in Glyph settings.";
       case "rate_limit":
@@ -295,9 +354,13 @@
     });
   }
 
-  function identifyFont(imageDataUrl) {
+  function identifyFont(imageDataUrl, fallbackImage) {
     return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: "GLYPH_IDENTIFY", image: imageDataUrl }, (res) => {
+      chrome.runtime.sendMessage({
+        type: "GLYPH_IDENTIFY",
+        image: imageDataUrl,
+        fallbackImage: fallbackImage || "",
+      }, (res) => {
         if (chrome.runtime.lastError || !res) {
           reject(Object.assign(new Error("network"), { code: "network" }));
           return;
@@ -1136,7 +1199,12 @@
     }
     const source = await requestFontSource(family);
     if (!host.isConnected || host._glyphSourceToken !== token) return;
-    applyFontSourceButton(host, family, source);
+    if (source) {
+      applyFontSourceButton(host, family, source);
+      return;
+    }
+    const matchUrl = content && content.matchUrl;
+    applyFontSourceButton(host, family, matchUrl ? { url: matchUrl, label: "WhatFontIs" } : null);
   }
 
   const HISTORY_KEY = "fontHistory";
@@ -1182,6 +1250,7 @@
       pageTitle: document.title || "",
     };
     if (previewDataUrl) entry.preview = previewDataUrl;
+    if (content.matchUrl) entry.matchUrl = content.matchUrl;
     const sampleText = truncateSampleText(content.sampleText);
     if (sampleText) entry.sampleText = sampleText;
     try {
@@ -1275,6 +1344,27 @@
       return (hi | (hi >> 4)).toString(16).padStart(2, "0");
     };
     return "#" + fill(key >> 16) + fill(key >> 8) + fill(key & 0xff);
+  }
+
+  function formatMatchResult(data, sampledColor) {
+    const font = data?.font || "Unknown";
+    const properties = [{ value: font }];
+    if (data?.license === "Free" || data?.license === "Commercial") {
+      properties.push({ value: data.license });
+    }
+    const similars = Array.isArray(data?.similars) ? data.similars.filter(Boolean).slice(0, 3) : [];
+    if (similars.length) {
+      properties.push({ value: similars.join(", "), before: " · Similar " });
+    }
+    const color = sampledColor || "";
+    if (color) properties.push({ value: color });
+    const content = {
+      properties,
+      styles: [],
+      matchUrl: data?.matchUrl || "",
+    };
+    if (color) content.swatchColor = color;
+    return content;
   }
 
   function formatIdentifyResult(data, sampledColor) {
@@ -1437,7 +1527,7 @@
     node.className = "glyph-card" + (darkTheme ? " glyph-card--dark" : "");
     // Hold the source-link slot before the first paint so the card doesn't
     // grow when that button arrives.
-    if (options && options.hidden && canResolveFontSource(fontNameFromContent(content))) {
+    if ((content && content.matchUrl) || (options && options.hidden && canResolveFontSource(fontNameFromContent(content)))) {
       node.classList.add("glyph-card--has-gfonts");
     }
 

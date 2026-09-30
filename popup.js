@@ -189,7 +189,7 @@ function applySnipModel(id) {
   aiMenu.querySelectorAll(".ai-option").forEach((option) => {
     option.setAttribute("aria-selected", option.dataset.model === next ? "true" : "false");
   });
-  aiChip.title = `Snip uses ${snipModelLabel(next)}`;
+  aiChip.title = `Fallback model when WhatFontIs can't separate the letters: ${snipModelLabel(next)}`;
   return next;
 }
 
@@ -484,17 +484,19 @@ function requestFontSource(family) {
   });
 }
 
-function attachFontSourceLink(card, family) {
-  if (!googleFontsFamilySlug(family)) return;
+function attachFontSourceLink(card, family, fallback) {
+  const fallbackSource = fallback && fallback.url ? fallback : null;
+  if (!googleFontsFamilySlug(family) && !fallbackSource) return;
   requestFontSource(family).then((source) => {
-    if (!source?.url || !card.isConnected) return;
+    const chosen = source?.url ? source : fallbackSource;
+    if (!chosen?.url || !card.isConnected) return;
     if (card.querySelector(".history-gfonts")) return;
     const link = makeHistoryLink(
       "history-gfonts",
       GFONTS_ICON,
-      source.label || "Font source",
-      `View ${family} on ${source.label}`,
-      () => openExternalUrl(source.url)
+      chosen.label || "Font source",
+      `View ${family} on ${chosen.label || "WhatFontIs"}`,
+      () => openExternalUrl(chosen.url)
     );
     const pageLink = card.querySelector(".history-source");
     if (pageLink) card.insertBefore(link, pageLink);
@@ -609,7 +611,7 @@ function makeHistoryCard(entry, options = {}) {
   syncHistoryActionPadding(card);
 
   const family = fontNameFromEntry(entry);
-  attachFontSourceLink(card, family);
+  attachFontSourceLink(card, family, entry.matchUrl ? { url: entry.matchUrl, label: "WhatFontIs" } : null);
 
   if (isOpenableUrl(entry.pageUrl)) {
     const label = pageLinkLabel(entry.pageUrl);
@@ -1220,7 +1222,7 @@ document.getElementById("btn-settings").addEventListener("click", async () => {
   settings.classList.remove("hidden");
   document.querySelector(".popup").scrollTop = 0;
   const { apiKey } = await chrome.storage.local.get("apiKey");
-  if (apiKey) apiKeyInput.value = apiKey;
+  if (apiKeyInput) apiKeyInput.value = apiKey || "";
   syncApiKeyCopy();
   await syncSaveHistoryToggle();
   await syncSelectionCardToggle();
@@ -1287,35 +1289,40 @@ document.getElementById("btn-back").addEventListener("click", () => {
   document.querySelector(".popup").scrollTop = 0;
 });
 
-function syncApiKeyCopy() {
-  if (!btnCopyApiKey || !apiKeyInput) return;
-  const empty = !apiKeyInput.value.trim();
-  btnCopyApiKey.disabled = empty;
-  if (!btnCopyApiKey.classList.contains("api-key-copy--done")) {
-    btnCopyApiKey.title = empty ? "Nothing to copy" : "Copy API key";
-    btnCopyApiKey.setAttribute("aria-label", "Copy API key");
+function bindKeyCopy(input, button, syncName) {
+  const sync = () => {
+    if (!button || !input) return;
+    const empty = !input.value.trim();
+    button.disabled = empty;
+    if (!button.classList.contains("api-key-copy--done")) {
+      button.title = empty ? "Nothing to copy" : "Copy API key";
+      button.setAttribute("aria-label", `Copy ${syncName}`);
+    }
+  };
+  if (input) input.addEventListener("input", sync);
+  if (button) {
+    button.addEventListener("click", async () => {
+      const value = input.value.trim();
+      if (!value || !(await copyText(value))) return;
+      button.classList.add("api-key-copy--done");
+      button.title = "Copied";
+      button.setAttribute("aria-label", `${syncName} copied`);
+      clearTimeout(button._glyphCopyTimer);
+      button._glyphCopyTimer = setTimeout(() => {
+        button.classList.remove("api-key-copy--done");
+        sync();
+      }, 1200);
+    });
   }
+  return sync;
 }
 
-if (apiKeyInput) apiKeyInput.addEventListener("input", syncApiKeyCopy);
-
-if (btnCopyApiKey) {
-  btnCopyApiKey.addEventListener("click", async () => {
-    const value = apiKeyInput.value.trim();
-    if (!value || !(await copyText(value))) return;
-    btnCopyApiKey.classList.add("api-key-copy--done");
-    btnCopyApiKey.title = "Copied";
-    btnCopyApiKey.setAttribute("aria-label", "API key copied");
-    clearTimeout(btnCopyApiKey._glyphCopyTimer);
-    btnCopyApiKey._glyphCopyTimer = setTimeout(() => {
-      btnCopyApiKey.classList.remove("api-key-copy--done");
-      syncApiKeyCopy();
-    }, 1200);
-  });
-}
+const syncApiKeyCopy = bindKeyCopy(apiKeyInput, btnCopyApiKey, "Anthropic API key");
 
 document.getElementById("btn-save").addEventListener("click", async () => {
-  await chrome.storage.local.set({ apiKey: apiKeyInput.value.trim() });
+  await chrome.storage.local.set({
+    apiKey: apiKeyInput ? apiKeyInput.value.trim() : "",
+  });
   syncApiKeyCopy();
   saveNote.classList.remove("hidden");
   setTimeout(() => saveNote.classList.add("hidden"), 1500);
