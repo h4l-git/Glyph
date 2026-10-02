@@ -105,11 +105,14 @@ nav {
   background: var(--turquoise);
   display: flex; align-items: center; justify-content: center;
 }
-.nav-links { display: flex; gap: 28px; align-items: center; }
+.nav-links { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
 .nav-links a:hover { color: var(--ink); }
+.nav-links a.btn { border: 1.5px solid transparent; white-space: nowrap; }
 .nav-links a.btn-primary { color: #fff; }
 .nav-links a.btn-primary:hover { color: #fff; }
+.nav-links a.btn-ghost { color: var(--bronze); border-color: var(--bronze); }
+.nav-links a.btn-ghost:hover { color: var(--bronze); background: rgba(107, 79, 48, 0.06); }
 
 .hero {
   max-width: 1200px;
@@ -396,6 +399,8 @@ footer .display { font-size: 15px; color: var(--ink); }
 .footer-link:hover { color: var(--ink); }
 
 @media (max-width: 760px) {
+  nav { flex-wrap: wrap; row-gap: 14px; }
+  .nav-links { width: 100%; justify-content: flex-end; }
   .hero { grid-template-columns: 1fr; padding-top: 4vh; }
   .hero-eye { max-width: 300px; order: -1; }
   .logo-link { width: 148px; height: 64px; padding: 8px 10px; }
@@ -534,6 +539,7 @@ html.is-loading { overflow: hidden; }
     </span>
   </div>
   <div class="nav-links">
+    <a href="https://flying-sun-2a4.notion.site/Glyph-3d42d1133285801b932cc5f939bff242?source=copy_link" class="btn btn-ghost" style="padding: 9px 18px;">Documentation</a>
     <a href="https://chromewebstore.google.com/detail/glyph/ibioikhlalicigjadkpjfcjhdlkeegnj" class="btn btn-primary" style="padding: 9px 18px;">Add to Chrome</a>
   </div>
 </nav>
