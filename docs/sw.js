@@ -1,4 +1,4 @@
-var CACHE = "glyph-home-v6";
+var CACHE = "glyph-home-1.0.0";
 
 self.addEventListener("install", function (event) {
   event.waitUntil(caches.open(CACHE).then(function (cache) {

@@ -10,8 +10,21 @@
   let selectingWithPointer = false;
   let lastSelectionFingerprint = "";
   let selectionRememberTimer = 0;
+  const pinned = new Set();
+  let pinListening = false;
+  let pinRaf = 0;
+  let snipDrag = null;
+  let snipGeneration = 0;
+  let snipCaptureSerial = 0;
+  let imgOutline = null;
+  let imgLockedOutline = null;
+  let imgLockedRect = null;
 
   chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === "GLYPH_SNIP_LIMIT") {
+      showSnipLimit(msg.resetAt);
+      return;
+    }
     if (msg.type !== "GLYPH_START") return;
     beginTool(msg.mode);
   });
@@ -22,6 +35,7 @@
     loadTheme();
     chrome.runtime.sendMessage({ type: "GLYPH_MODE_CHANGED", active: true, mode });
     if (mode === "snip") startSnip();
+    if (mode === "image") startImagePick();
     if (mode === "highlight") startHighlight();
   }
 
@@ -37,17 +51,24 @@
   }
 
   function cleanup() {
-    document.querySelectorAll(".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline").forEach((n) => n.remove());
+    snipGeneration += 1;
+    releaseAllPins();
+    document.querySelectorAll(".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline, .glyph-img-hint").forEach((n) => n.remove());
     document.removeEventListener("mousemove", onHighlightMove, true);
     document.removeEventListener("click", onHighlightClick, true);
+    document.removeEventListener("mousemove", onImageMove, true);
+    document.removeEventListener("click", onImageClick, true);
     document.removeEventListener("keydown", onEsc, true);
     document.removeEventListener("contextmenu", onRightClick, true);
-    document.documentElement.classList.remove("glyph-hl-mode");
+    document.documentElement.classList.remove("glyph-hl-mode", "glyph-img-mode");
     overlay = null;
     card = null;
     hlOutline = null;
     hlLockedOutline = null;
     hlLockedRect = null;
+    imgOutline = null;
+    imgLockedOutline = null;
+    imgLockedRect = null;
     if (mode) {
       chrome.runtime.sendMessage({ type: "GLYPH_MODE_CHANGED", active: false });
       mode = null;
@@ -81,37 +102,201 @@
       if (e.button !== 0) return; // right-click is handled by onRightClick
       startX = e.clientX;
       startY = e.clientY;
-      if (box) box.remove();
-      if (card) {
-        card.remove();
-        card = null;
+      if (box) {
+        releasePin(box);
+        box.remove();
       }
+      removeCards();
+      card = null;
       box = document.createElement("div");
       box.className = "glyph-box";
       overlay.appendChild(box);
       positionBox(box, startX, startY, startX, startY);
+      // The drag-start corner stays on the content if the page scrolls mid-drag.
+      snipDrag = { pin: makePin(startX, startY), x2: startX, y2: startY, box };
+      ensurePinListener();
 
-      const onMove = (ev) => positionBox(box, startX, startY, ev.clientX, ev.clientY);
+      const onMove = (ev) => {
+        if (!snipDrag || snipDrag.box !== box) return;
+        snipDrag.x2 = ev.clientX;
+        snipDrag.y2 = ev.clientY;
+        const start = clientFromPin(snipDrag.pin) || { x: startX, y: startY };
+        positionBox(box, start.x, start.y, ev.clientX, ev.clientY);
+      };
       const onUp = async (ev) => {
         overlay.removeEventListener("mousemove", onMove);
         overlay.removeEventListener("mouseup", onUp);
+        const start = (snipDrag && snipDrag.box === box && clientFromPin(snipDrag.pin)) || { x: startX, y: startY };
+        snipDrag = null;
         const rect = {
-          x: Math.min(startX, ev.clientX),
-          y: Math.min(startY, ev.clientY),
-          w: Math.abs(ev.clientX - startX),
-          h: Math.abs(ev.clientY - startY),
+          x: Math.min(start.x, ev.clientX),
+          y: Math.min(start.y, ev.clientY),
+          w: Math.abs(ev.clientX - start.x),
+          h: Math.abs(ev.clientY - start.y),
         };
         // Keep the green box around a successful snip until dismiss.
         if (rect.w > 8 && rect.h > 8) {
-          positionBox(box, startX, startY, ev.clientX, ev.clientY);
+          positionBox(box, start.x, start.y, ev.clientX, ev.clientY);
+          pinElement(box, rect.x + rect.w / 2, rect.y + rect.h / 2);
           captureAndIdentify(rect);
         } else {
+          releasePin(box);
           box.remove();
           box = null;
+          if (!pinned.size) stopPinListener();
         }
       };
       overlay.addEventListener("mousemove", onMove);
       overlay.addEventListener("mouseup", onUp);
+    });
+  }
+
+  // Fixed chrome tracks the element under the selection, so window and nested
+  // scrolling both keep the box and card on the same part of the page.
+  function pageAnchorAt(clientX, clientY) {
+    const x = Math.min(window.innerWidth - 1, Math.max(0, clientX));
+    const y = Math.min(window.innerHeight - 1, Math.max(0, clientY));
+    let stack = [];
+    try {
+      stack = document.elementsFromPoint(x, y);
+    } catch (err) {
+      stack = [];
+    }
+    for (const el of stack) {
+      if (!el || el === document.body || el === document.documentElement) continue;
+      if (el.closest && el.closest(".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline")) continue;
+      return el;
+    }
+    return document.documentElement;
+  }
+
+  function makePin(clientX, clientY) {
+    const anchor = pageAnchorAt(clientX, clientY);
+    const rect = anchor.getBoundingClientRect();
+    return { anchor, dx: clientX - rect.left, dy: clientY - rect.top };
+  }
+
+  function clientFromPin(pin) {
+    if (!pin || !pin.anchor || !pin.anchor.isConnected) return null;
+    const rect = pin.anchor.getBoundingClientRect();
+    return { x: rect.left + pin.dx, y: rect.top + pin.dy };
+  }
+
+  function liveOrigin(el, fallback) {
+    return clientFromPin(el && el._glyphPin) || fallback;
+  }
+
+  function ensurePinListener() {
+    if (pinListening) return;
+    pinListening = true;
+    window.addEventListener("scroll", schedulePinSync, true);
+    window.addEventListener("resize", schedulePinSync);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("scroll", schedulePinSync);
+      window.visualViewport.addEventListener("resize", schedulePinSync);
+    }
+  }
+
+  function stopPinListener() {
+    if (!pinListening) return;
+    pinListening = false;
+    window.removeEventListener("scroll", schedulePinSync, true);
+    window.removeEventListener("resize", schedulePinSync);
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener("scroll", schedulePinSync);
+      window.visualViewport.removeEventListener("resize", schedulePinSync);
+    }
+    if (pinRaf) {
+      cancelAnimationFrame(pinRaf);
+      pinRaf = 0;
+    }
+  }
+
+  function schedulePinSync() {
+    if (pinRaf) return;
+    pinRaf = requestAnimationFrame(syncPinned);
+  }
+
+  function syncPinned() {
+    pinRaf = 0;
+    if (snipDrag && snipDrag.box.isConnected) {
+      const start = clientFromPin(snipDrag.pin);
+      if (start) positionBox(snipDrag.box, start.x, start.y, snipDrag.x2, snipDrag.y2);
+    }
+    for (const el of pinned) {
+      if (!el.isConnected) {
+        pinned.delete(el);
+        continue;
+      }
+      const next = clientFromPin(el._glyphPin);
+      if (!next) continue;
+      el.style.left = next.x + "px";
+      el.style.top = next.y + "px";
+    }
+    if (!pinned.size && !snipDrag) stopPinListener();
+  }
+
+  function pinElement(el, sampleX, sampleY) {
+    if (!el) return;
+    releasePin(el);
+    const anchor = pageAnchorAt(sampleX, sampleY);
+    const rect = anchor.getBoundingClientRect();
+    el._glyphPin = {
+      anchor,
+      dx: (parseFloat(el.style.left) || 0) - rect.left,
+      dy: (parseFloat(el.style.top) || 0) - rect.top,
+    };
+    pinned.add(el);
+    ensurePinListener();
+  }
+
+  function pinSharing(el, source) {
+    const anchor = source && source._glyphPin && source._glyphPin.anchor;
+    if (!el) return;
+    if (!anchor || !anchor.isConnected) {
+      const sample = el._glyphPinAt;
+      if (sample) pinElement(el, sample.x, sample.y);
+      else pinElement(el, parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0);
+      return;
+    }
+    releasePin(el);
+    const rect = anchor.getBoundingClientRect();
+    el._glyphPin = {
+      anchor,
+      dx: (parseFloat(el.style.left) || 0) - rect.left,
+      dy: (parseFloat(el.style.top) || 0) - rect.top,
+    };
+    pinned.add(el);
+    ensurePinListener();
+  }
+
+  function pinCard(node) {
+    const source = mode === "snip"
+      ? document.querySelector(".glyph-box")
+      : mode === "highlight"
+        ? hlLockedOutline
+        : mode === "image"
+          ? imgLockedOutline
+          : null;
+    pinSharing(node, source);
+  }
+
+  function releasePin(el) {
+    if (!el) return;
+    pinned.delete(el);
+    el._glyphPin = null;
+  }
+
+  function releaseAllPins() {
+    snipDrag = null;
+    pinned.clear();
+    stopPinListener();
+  }
+
+  function removeCards() {
+    document.querySelectorAll(".glyph-card").forEach((node) => {
+      releasePin(node);
+      node.remove();
     });
   }
 
@@ -238,6 +423,75 @@
     });
   }
 
+  // The file is already the sharpest pixels we have. Downscale only, and give
+  // transparent art a matte so JPEG doesn't turn the letters black.
+  function prepareSourceImage(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxLong = 2000;
+        const long = Math.max(img.width, img.height, 1);
+        const scale = Math.min(1, maxLong / long);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const matte = sourceMatte(ctx, canvas.width, canvas.height);
+        if (matte) {
+          const copy = document.createElement("canvas");
+          copy.width = canvas.width;
+          copy.height = canvas.height;
+          copy.getContext("2d").drawImage(canvas, 0, 0);
+          ctx.fillStyle = matte;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(copy, 0, 0);
+        }
+        try {
+          resolve(canvas.toDataURL("image/jpeg", 0.9));
+        } catch (err) {
+          resolve("");
+        }
+      };
+      img.onerror = () => resolve("");
+      img.src = dataUrl;
+    });
+  }
+
+  function sourceMatte(ctx, w, h) {
+    const points = [];
+    const cols = 8;
+    const rows = 8;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        points.push([
+          Math.min(w - 1, Math.floor(((col + 0.5) * w) / cols)),
+          Math.min(h - 1, Math.floor(((row + 0.5) * h) / rows)),
+        ]);
+      }
+    }
+    points.push([0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]);
+    let lum = 0;
+    let count = 0;
+    let transparent = false;
+    for (const [x, y] of points) {
+      let px;
+      try {
+        px = ctx.getImageData(x, y, 1, 1).data;
+      } catch (err) {
+        return "";
+      }
+      if (px[3] < 250) {
+        transparent = true;
+        continue;
+      }
+      lum += (0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2]) / 255;
+      count += 1;
+    }
+    if (!transparent) return "";
+    return count && lum / count > 0.72 ? "#1a1a18" : "#ffffff";
+  }
+
   function clampCaptureRect(rect) {
     const x = Math.max(0, rect.x);
     const y = Math.max(0, rect.y);
@@ -256,32 +510,375 @@
     return compressPreview(cropped);
   }
 
-  async function captureAndIdentify(rect) {
-    const res = await captureScreen();
-    if (!res?.dataUrl) {
-      showCard(rect.x, rect.y, "Couldn't capture the screen. Try again.");
-      return;
-    }
-    const cropped = await cropImage(res.dataUrl, clampCaptureRect(rect));
-    if (!cropped) {
-      showCard(rect.x, rect.y, "Couldn't capture the screen. Try again.");
-      return;
-    }
-    showCard(rect.x, rect.y, "Identifying font…");
-    const stored = await chrome.storage.local.get("apiKey");
+  // Browser zoom repaints the glyphs. A canvas upscale of the same screenshot does not.
+  const SHARP_TARGET_EDGE = 800;
+  const SHARP_ENOUGH_EDGE = 640;
+  const SHARP_MIN_RATIO = 1.2;
+  const SHARP_FIT = 0.84;
+
+  function sendRuntime(message) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(message, (res) => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(res || null);
+        });
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function sharpSnipEnabled() {
     try {
-      const [image, sampledColor] = await Promise.all([
-        prepareMatchImage(cropped),
-        sampleTextColor(cropped),
-      ]);
-      if (!image) {
-        updateCard("Couldn't capture the screen. Try again.");
+      const data = await chrome.storage.local.get("sharpSnip");
+      return !!data.sharpSnip;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function sharpZoomRatio(rect) {
+    const dpr = window.devicePixelRatio || 1;
+    const short = Math.min(rect.w, rect.h);
+    if (short < 1 || short * dpr >= SHARP_ENOUGH_EDGE) return 0;
+    const want = SHARP_TARGET_EDGE / (short * dpr);
+    const fitW = (SHARP_FIT * window.innerWidth) / rect.w;
+    const fitH = (SHARP_FIT * window.innerHeight) / rect.h;
+    const ratio = Math.min(want, fitW, fitH);
+    if (!Number.isFinite(ratio) || ratio < SHARP_MIN_RATIO) return 0;
+    return Math.round(ratio * 100) / 100;
+  }
+
+  function setSnipHold(on) {
+    if (!overlay) return;
+    overlay.classList.toggle("glyph-overlay--hold", on);
+    overlay.classList.toggle("glyph-overlay--dark", on && darkTheme);
+  }
+
+  function caretFromPoint(x, y) {
+    const cx = Math.min(window.innerWidth - 1, Math.max(0, x));
+    const cy = Math.min(window.innerHeight - 1, Math.max(0, y));
+    try {
+      const range = document.caretRangeFromPoint(cx, cy);
+      if (range && range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) return range;
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
+  // Live text only. A zoomed screenshot of a picture is the same pixels, drawn bigger.
+  function textRangeInRect(rect) {
+    const hits = [];
+    const cols = Math.min(10, Math.max(2, Math.ceil(rect.w / 18)));
+    const rows = Math.min(8, Math.max(1, Math.ceil(rect.h / 14)));
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const caret = caretFromPoint(
+          rect.x + (rect.w * (col + 0.5)) / cols,
+          rect.y + (rect.h * (row + 0.5)) / rows
+        );
+        if (caret) hits.push(caret);
+      }
+    }
+    if (!hits.length) return null;
+    hits.sort((a, b) => {
+      try {
+        return a.compareBoundaryPoints(Range.START_TO_START, b);
+      } catch (err) {
+        return 0;
+      }
+    });
+    const range = document.createRange();
+    const first = hits[0];
+    const last = hits[hits.length - 1];
+    try {
+      range.setStart(first.startContainer, first.startOffset);
+      const endNode = last.startContainer;
+      let endOffset = last.startOffset;
+      if (endNode.nodeType === Node.TEXT_NODE && endOffset < endNode.data.length) endOffset += 1;
+      range.setEnd(endNode, endOffset);
+    } catch (err) {
+      return null;
+    }
+    return range.collapsed ? null : range;
+  }
+
+  function anchorFraction(anchor, rect) {
+    if (!anchor || !anchor.getBoundingClientRect) return null;
+    const box = anchor.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return null;
+    return {
+      anchor,
+      dx: (rect.x - box.left) / box.width,
+      dy: (rect.y - box.top) / box.height,
+      dw: rect.w / box.width,
+      dh: rect.h / box.height,
+    };
+  }
+
+  function rectFromFraction(saved) {
+    if (!saved || !saved.anchor || !saved.anchor.isConnected) return null;
+    const box = saved.anchor.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return null;
+    return {
+      x: box.left + saved.dx * box.width,
+      y: box.top + saved.dy * box.height,
+      w: saved.dw * box.width,
+      h: saved.dh * box.height,
+    };
+  }
+
+  function rectFromRange(range) {
+    let rects;
+    try {
+      rects = range.getClientRects();
+    } catch (err) {
+      return null;
+    }
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+    let count = 0;
+    for (const part of rects) {
+      if (part.width < 1 || part.height < 1) continue;
+      count += 1;
+      x1 = Math.min(x1, part.left);
+      y1 = Math.min(y1, part.top);
+      x2 = Math.max(x2, part.right);
+      y2 = Math.max(y2, part.bottom);
+    }
+    if (!count) return null;
+    const pad = 3;
+    return { x: x1 - pad, y: y1 - pad, w: x2 - x1 + pad * 2, h: y2 - y1 + pad * 2 };
+  }
+
+  function measuredSnipRect(range, fraction, original) {
+    const fromRange = range ? rectFromRange(range) : null;
+    const fromAnchor = rectFromFraction(fraction);
+    if (fromRange && fromRange.w <= original.w * 2.2 + 24 && fromRange.h <= original.h * 3 + 24) return fromRange;
+    return fromAnchor || fromRange;
+  }
+
+  function isScrollable(node) {
+    if (!node || node.nodeType !== 1) return false;
+    let style;
+    try {
+      style = getComputedStyle(node);
+    } catch (err) {
+      return false;
+    }
+    const scrollY = /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 2;
+    const scrollX = /(auto|scroll|overlay)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 2;
+    return scrollX || scrollY;
+  }
+
+  function snapshotScrolls(anchor) {
+    const items = [];
+    const seen = new Set();
+    const add = (node, left, top) => {
+      if (!node || seen.has(node)) return;
+      seen.add(node);
+      items.push({ node, left, top });
+    };
+    let node = anchor && anchor.nodeType === 1 ? anchor : anchor && anchor.parentElement;
+    while (node) {
+      if (isScrollable(node) || node === document.scrollingElement || node === document.documentElement || node === document.body) {
+        add(node, node.scrollLeft, node.scrollTop);
+      }
+      node = node.parentElement;
+    }
+    add(window, window.scrollX, window.scrollY);
+    return items;
+  }
+
+  function restoreScrolls(items) {
+    if (!items) return;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (item.node === window) {
+        window.scrollTo(item.left, item.top);
+        continue;
+      }
+      if (!item.node.isConnected) continue;
+      item.node.scrollLeft = item.left;
+      item.node.scrollTop = item.top;
+    }
+  }
+
+  function nudgeScroll(start, dx, dy) {
+    let node = start && start.nodeType === 1 ? start : start && start.parentElement;
+    while (node) {
+      if (isScrollable(node)) {
+        const maxX = Math.max(0, node.scrollWidth - node.clientWidth);
+        const maxY = Math.max(0, node.scrollHeight - node.clientHeight);
+        const left = Math.min(maxX, Math.max(0, node.scrollLeft + dx));
+        const top = Math.min(maxY, Math.max(0, node.scrollTop + dy));
+        const usedX = left - node.scrollLeft;
+        const usedY = top - node.scrollTop;
+        if (usedX || usedY) {
+          node.scrollLeft = left;
+          node.scrollTop = top;
+          dx -= usedX;
+          dy -= usedY;
+        }
+      }
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      node = node.parentElement;
+    }
+    window.scrollBy(dx, dy);
+  }
+
+  function rangeStartElement(range) {
+    const node = range && range.startContainer;
+    if (!node) return null;
+    return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  }
+
+  async function waitForViewportWidth(fromWidth, untilChanged) {
+    const start = Date.now();
+    while (Date.now() - start < 800) {
+      const delta = Math.abs(window.innerWidth - fromWidth);
+      if (untilChanged ? delta > 1 : delta < 2) break;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+
+  async function centerSnipRect(getRect, anchor) {
+    let rect = getRect();
+    for (let i = 0; i < 5 && rect; i++) {
+      const dx = (rect.x + rect.w / 2) - window.innerWidth / 2;
+      const dy = (rect.y + rect.h / 2) - window.innerHeight / 2;
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) break;
+      nudgeScroll(anchor, dx, dy);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      rect = getRect();
+    }
+    return rect;
+  }
+
+  function withOverlayHidden(read) {
+    if (!overlay) return read();
+    const prev = overlay.style.visibility;
+    overlay.style.visibility = "hidden";
+    try {
+      return read();
+    } finally {
+      overlay.style.visibility = prev;
+    }
+  }
+
+  async function captureSharperCrop(rect, alive, stillCurrent) {
+    const ratio = sharpZoomRatio(rect);
+    if (!ratio || !alive()) return "";
+    // The snip overlay sits above the page, so caret hit-testing has to see through it.
+    const sampled = withOverlayHidden(() => ({
+      range: textRangeInRect(rect),
+      anchor: pageAnchorAt(rect.x + rect.w / 2, rect.y + rect.h / 2),
+    }));
+    const range = sampled.range;
+    const anchor = sampled.anchor;
+    // Pictures stay at the normal capture. Live text and framed pages are redrawn by the zoom.
+    if (!range && (!anchor || anchor.tagName !== "IFRAME")) return "";
+    const fraction = anchorFraction(anchor, rect);
+    const scrolls = snapshotScrolls(rangeStartElement(range) || anchor);
+    const widthBefore = window.innerWidth;
+    setSnipHold(true);
+    let zoomId = 0;
+    let zoomState = null;
+    try {
+      const begun = await sendRuntime({ type: "GLYPH_ZOOM_BEGIN", ratio });
+      if (begun && begun.ok) {
+        zoomId = begun.id;
+        zoomState = begun.zoom || null;
+      }
+      if (!zoomId || !alive()) return "";
+      await waitForViewportWidth(widthBefore, true);
+      if (!alive()) return "";
+      const scrollFrom = rangeStartElement(range) || anchor;
+      const next = await centerSnipRect(() => measuredSnipRect(range, fraction, rect), scrollFrom);
+      if (!alive() || !next || next.w < 8 || next.h < 8) return "";
+      const viewW = window.innerWidth;
+      const res = await captureScreen();
+      if (!alive() || !res?.dataUrl) return "";
+      return await cropImage(res.dataUrl, clampCaptureRect(next), viewW);
+    } catch (err) {
+      return "";
+    } finally {
+      if (zoomId) await sendRuntime({ type: "GLYPH_ZOOM_END", id: zoomId, zoom: zoomState });
+      if (zoomId && stillCurrent()) {
+        await waitForViewportWidth(widthBefore, false);
+        restoreScrolls(scrolls);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        restoreScrolls(scrolls);
+      }
+      if (stillCurrent()) setSnipHold(false);
+    }
+  }
+
+  async function captureAndIdentify(rect) {
+    const serial = ++snipCaptureSerial;
+    const generation = snipGeneration;
+    const alive = () => serial === snipCaptureSerial && generation === snipGeneration && mode === "snip";
+    const stillCurrent = () => serial === snipCaptureSerial;
+    const getPoint = () => liveOrigin(document.querySelector(".glyph-box"), { x: rect.x, y: rect.y });
+    let cropped = "";
+    if (await sharpSnipEnabled()) cropped = await captureSharperCrop(rect, alive, stillCurrent);
+    if (!alive()) return;
+    if (!cropped) {
+      const res = await captureScreen();
+      if (!alive()) return;
+      if (!res?.dataUrl) {
+        const at = getPoint();
+        showCard(at.x, at.y, "Couldn't capture the screen. Try again.");
         return;
       }
-      const fallbackImage = String(stored.apiKey || "").trim()
-        ? await prepareIdentifyImage(cropped)
+      cropped = await cropImage(res.dataUrl, clampCaptureRect(rect));
+    }
+    if (!alive()) return;
+    if (!cropped) {
+      const at = getPoint();
+      showCard(at.x, at.y, "Couldn't capture the screen. Try again.");
+      return;
+    }
+    await finishIdentify(getPoint, cropped, { alive });
+  }
+
+  async function finishIdentify(getPoint, raw, options) {
+    const alive = (options && options.alive) || (() => true);
+    const sourceImage = !!(options && options.sourceImage);
+    if (!alive()) return;
+    const at = getPoint();
+    showCard(at.x, at.y, "Identifying font…");
+    const stored = await chrome.storage.local.get(["apiKey", "snipModel"]);
+    if (!alive()) return;
+    try {
+      const image = raw
+        ? await (sourceImage ? prepareSourceImage(raw) : prepareMatchImage(raw))
         : "";
-      const result = await identifyFont(image, fallbackImage);
+      const imageUrl = image ? "" : ((options && options.imageUrl) || "");
+      if (!image && !imageUrl) {
+        if (alive()) updateCard(sourceImage
+          ? "Couldn't read that image. Try snipping the letters."
+          : "Couldn't capture the screen. Try again.");
+        return;
+      }
+      const sampledColor = raw ? await sampleTextColor(image || raw) : "";
+      if (!alive()) return;
+      const claudeFallback = typeof stored.snipModel === "string" && stored.snipModel.startsWith("claude-");
+      const fallbackImage = claudeFallback && String(stored.apiKey || "").trim() && raw
+        ? await prepareIdentifyImage(raw)
+        : "";
+      if (!alive()) return;
+      const result = await identifyFont(image, fallbackImage, {
+        detectText: !!(options && options.detectText),
+        imageUrl,
+      });
+      if (!alive()) return;
       const faces = Array.isArray(result?.fonts) && result.fonts.length ? result.fonts : [result];
       const formatted = result?.engine === "whatfontis"
         ? [formatMatchResult(faces[0], sampledColor)]
@@ -291,14 +888,45 @@
           if (content && content.properties) content.properties.push({ value: "Closest guess" });
         });
       }
-      showResultCards(rect.x, rect.y, formatted);
-      if (await historySavingEnabled()) {
-        const preview = await compressPreview(cropped);
+      const placed = getPoint();
+      showResultCards(placed.x, placed.y, formatted);
+      const previewSource = image || raw;
+      if (previewSource && await historySavingEnabled()) {
+        const preview = await compressPreview(previewSource);
+        if (!alive()) return;
         for (const entry of formatted) await rememberResult(entry, preview);
       }
     } catch (err) {
+      if (!alive()) return;
+      if (err && err.code === "snip_limit") {
+        showSnipLimit(err.resetAt);
+        return;
+      }
       updateCard(identifyErrorMessage(err));
     }
+  }
+
+  function nextWfiReset(now = Date.now()) {
+    const date = new Date(now);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+  }
+
+  function formatSnipReset(resetAt, now = Date.now()) {
+    const end = Number(resetAt) || nextWfiReset(now);
+    const minutes = Math.max(1, Math.ceil(Math.max(0, end - now) / 60000));
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours && mins) return `Resets in ${hours}h ${mins}m`;
+    if (hours) return `Resets in ${hours}h`;
+    return `Resets in ${mins}m`;
+  }
+
+  function showSnipLimit(resetAt) {
+    const text = `Snip Limit Reached\n${formatSnipReset(resetAt)}`;
+    const x = Math.max(12, Math.round(window.innerWidth / 2 - 110));
+    const y = Math.max(12, Math.round(window.innerHeight / 3));
+    cleanup();
+    showCard(x, y, text);
   }
 
   function identifyErrorMessage(err) {
@@ -307,12 +935,16 @@
         return "Snip isn't available right now.";
       case "wfi_unauthorized":
         return "That WhatFontIs key was rejected. Check it in Glyph settings.";
+      case "snip_limit":
       case "wfi_quota":
-        return "WhatFontIs limit reached. Top up, or try again tomorrow.";
+        return `Snip Limit Reached\n${formatSnipReset(err && err.resetAt)}`;
       case "no_chars":
         return "Couldn't separate the letters. Try a clearer line of text.";
+      case "no_font":
+        return "No font detected in selected area";
       case "wfi_image":
-        return "That crop couldn't be read. Try a tighter box around the letters.";
+      case "bad_image":
+        return "That image couldn't be read. Try a tighter box around the letters.";
       case "wfi_down":
         return "WhatFontIs is busy. Try again in a moment.";
       case "wfi_network":
@@ -334,14 +966,15 @@
     }
   }
 
-  function cropImage(dataUrl, rect) {
+  function cropImage(dataUrl, rect, viewportWidth) {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const scale = img.width / window.innerWidth;
+        const viewW = viewportWidth || window.innerWidth || img.width;
+        const scale = img.width / viewW;
         const canvas = document.createElement("canvas");
-        canvas.width = rect.w * scale;
-        canvas.height = rect.h * scale;
+        canvas.width = Math.max(1, Math.round(rect.w * scale));
+        canvas.height = Math.max(1, Math.round(rect.h * scale));
         const ctx = canvas.getContext("2d");
         ctx.drawImage(
           img,
@@ -350,23 +983,26 @@
         );
         resolve(canvas.toDataURL("image/png"));
       };
+      img.onerror = () => resolve("");
       img.src = dataUrl;
     });
   }
 
-  function identifyFont(imageDataUrl, fallbackImage) {
+  function identifyFont(imageDataUrl, fallbackImage, options) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
         type: "GLYPH_IDENTIFY",
         image: imageDataUrl,
         fallbackImage: fallbackImage || "",
+        detectText: !!(options && options.detectText),
+        imageUrl: (options && options.imageUrl) || "",
       }, (res) => {
         if (chrome.runtime.lastError || !res) {
           reject(Object.assign(new Error("network"), { code: "network" }));
           return;
         }
         if (res.error) {
-          reject(Object.assign(new Error(res.error), { code: res.error }));
+          reject(Object.assign(new Error(res.error), { code: res.error, resetAt: res.resetAt }));
           return;
         }
         resolve(res);
@@ -374,9 +1010,320 @@
     });
   }
 
+  /* ---------- Image picker ---------- */
+
+  const IMAGE_FETCH_MAX = 18 * 1024 * 1024;
+
+  function startImagePick() {
+    document.documentElement.classList.add("glyph-img-mode");
+    document.addEventListener("mousemove", onImageMove, true);
+    document.addEventListener("click", onImageClick, true);
+    document.addEventListener("keydown", onEsc, true);
+    document.addEventListener("contextmenu", onRightClick, true);
+    imgOutline = makeOutline();
+    imgLockedOutline = makeOutline();
+    const hint = document.createElement("div");
+    hint.className = "glyph-img-hint" + (darkTheme ? " glyph-img-hint--dark" : "");
+    hint.textContent = "Click a picture to identify its font";
+    document.body.appendChild(hint);
+    loadTheme().then(() => {
+      if (hint.isConnected) hint.classList.toggle("glyph-img-hint--dark", darkTheme);
+    });
+  }
+
+  function onImageMove(e) {
+    if (mode !== "image" || !imgOutline) return;
+    if (isInteractiveGlyphUI(e.target)) {
+      imgOutline.style.display = "none";
+      return;
+    }
+    const target = imageTargetFromPoint(e.clientX, e.clientY);
+    if (!target || rectsMatch(target.rect, imgLockedRect)) {
+      imgOutline.style.display = "none";
+      return;
+    }
+    placeHighlight(imgOutline, target.rect);
+  }
+
+  async function onImageClick(e) {
+    if (mode !== "image") return;
+    if (isInteractiveGlyphUI(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = imageTargetFromPoint(e.clientX, e.clientY);
+    if (!target) return;
+    const serial = ++snipCaptureSerial;
+    const generation = snipGeneration;
+    const alive = () => serial === snipCaptureSerial && generation === snipGeneration && mode === "image";
+    imgLockedRect = target.rect;
+    if (imgOutline) imgOutline.style.display = "none";
+    placeHighlight(imgLockedOutline, target.rect);
+    pinElement(
+      imgLockedOutline,
+      target.rect.left + target.rect.width / 2,
+      target.rect.top + target.rect.height / 2
+    );
+    const point = { x: e.clientX, y: e.clientY };
+    const anchorLeft = target.rect.left;
+    const anchorTop = target.rect.top;
+    const getPoint = () => {
+      const origin = liveOrigin(imgLockedOutline, { x: anchorLeft, y: anchorTop });
+      return {
+        x: point.x - anchorLeft + origin.x,
+        y: point.y - anchorTop + origin.y,
+      };
+    };
+    const at = getPoint();
+    showCard(at.x, at.y, "Reading image…");
+    let raw = "";
+    try {
+      raw = await rasterFromTarget(target);
+    } catch (err) {
+      raw = "";
+    }
+    if (!alive()) return;
+    await finishIdentify(getPoint, raw, {
+      alive,
+      sourceImage: true,
+      detectText: true,
+      imageUrl: publicHttpUrl(target.url),
+    });
+  }
+
+  function imageTargetFromPoint(x, y) {
+    let stack = [];
+    try {
+      stack = document.elementsFromPoint(x, y);
+    } catch (err) {
+      stack = [];
+    }
+    const page = [];
+    for (const el of stack) {
+      if (!el || isGlyphUI(el)) continue;
+      if (el.closest && el.closest(".glyph-overlay, .glyph-card")) return null;
+      page.push(el);
+    }
+    for (const el of page) {
+      if (el === document.body || el === document.documentElement) break;
+      const isPicture = el.tagName === "IMG"
+        || el.tagName === "PICTURE"
+        || el.tagName === "CANVAS"
+        || (el.localName === "image" && el.namespaceURI === "http://www.w3.org/2000/svg");
+      if (!isPicture) continue;
+      // A tiny icon should not fall through to the page background behind it.
+      return directImageTarget(el);
+    }
+    let node = page[0];
+    for (let depth = 0; depth < 4 && node && node !== document.body && node !== document.documentElement; depth++) {
+      const background = backgroundImageTarget(node);
+      if (background) return background;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function directImageTarget(el) {
+    const img = el.tagName === "IMG"
+      ? el
+      : (el.tagName === "PICTURE" ? el.querySelector("img") : null);
+    if (img) {
+      const rect = imageBox(img);
+      if (!rect || img.naturalWidth < 8 || img.naturalHeight < 8) return null;
+      return { el: img, rect, url: bestRasterUrl(img), kind: "img" };
+    }
+    if (el.localName === "image" && el.namespaceURI === "http://www.w3.org/2000/svg") {
+      const rect = imageBox(el);
+      const href = el.getAttribute("href") || el.getAttributeNS("http://www.w3.org/1999/xlink", "href") || "";
+      const url = resolvePageUrl(href);
+      if (!rect || !url) return null;
+      return { el, rect, url, kind: "svg-image" };
+    }
+    if (el.tagName === "CANVAS") {
+      const rect = imageBox(el);
+      if (!rect || el.width < 32 || el.height < 32) return null;
+      return { el, rect, url: "", kind: "canvas" };
+    }
+    return null;
+  }
+
+  function imageBox(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 12 || rect.height < 12) return null;
+    const long = Math.max(rect.width, rect.height);
+    const short = Math.min(rect.width, rect.height);
+    if (long < 72 && short < 48) return null;
+    if (rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) return null;
+    return rect;
+  }
+
+  function backgroundImageTarget(el) {
+    let style;
+    try {
+      style = getComputedStyle(el);
+    } catch (err) {
+      return null;
+    }
+    const bg = style.backgroundImage || "";
+    if (!bg || bg === "none" || bg.indexOf("url(") === -1) return null;
+    if (style.backgroundRepeat !== "no-repeat" && (style.backgroundSize === "auto" || style.backgroundSize === "auto auto")) return null;
+    const rect = imageBox(el);
+    const url = firstCssUrl(bg);
+    if (!rect || !url) return null;
+    return { el, rect, url, kind: "background" };
+  }
+
+  function resolvePageUrl(raw) {
+    const value = String(raw || "").trim();
+    if (!value) return "";
+    if (value.startsWith("data:") || value.startsWith("blob:")) return value;
+    try {
+      return new URL(value, document.baseURI).href;
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function publicHttpUrl(raw) {
+    try {
+      const url = new URL(String(raw || ""), document.baseURI);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+      if (url.username || url.password) return "";
+      return url.href;
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function firstCssUrl(value) {
+    const match = String(value || "").match(/url\(\s*(['"]?)(.*?)\1\s*\)/i);
+    if (!match) return "";
+    return resolvePageUrl(match[2]);
+  }
+
+  function srcsetCandidates(value) {
+    const list = [];
+    const re = /(\S+)\s+(\d+(?:\.\d+)?)([wx])\b/g;
+    let match;
+    const source = String(value || "");
+    while ((match = re.exec(source))) {
+      list.push({ url: match[1], amount: parseFloat(match[2]), unit: match[3] });
+    }
+    return list;
+  }
+
+  function bestRasterUrl(img) {
+    const current = resolvePageUrl(img.currentSrc || img.getAttribute("src") || "");
+    const pools = [];
+    if (img.getAttribute("srcset")) pools.push(img.getAttribute("srcset"));
+    const picture = img.closest && img.closest("picture");
+    if (picture) {
+      picture.querySelectorAll("source[srcset]").forEach((source) => {
+        pools.push(source.getAttribute("srcset"));
+      });
+    }
+    for (const pool of pools) {
+      const cands = srcsetCandidates(pool).map((cand) => ({
+        url: resolvePageUrl(cand.url),
+        amount: cand.amount,
+        unit: cand.unit,
+      })).filter((cand) => cand.url);
+      const ownsCurrent = !!current && cands.some((cand) => cand.url.split("#")[0] === current.split("#")[0]);
+      if (!ownsCurrent) continue;
+      const widths = cands.filter((cand) => cand.unit === "w");
+      const densities = cands.filter((cand) => cand.unit === "x");
+      const poolCands = widths.length ? widths : densities;
+      const widest = poolCands.reduce((best, cand) => (!best || cand.amount > best.amount ? cand : best), null);
+      if (widest) return widest.url;
+    }
+    return current;
+  }
+
+  function drawImageElement(el) {
+    const w = el.naturalWidth || el.width || 0;
+    const h = el.naturalHeight || el.height || 0;
+    if (w < 2 || h < 2) return "";
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(el, 0, 0, w, h);
+      return canvas.toDataURL("image/png");
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function blobToDataUrlInPage(blob) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function fetchImageBlob(url) {
+    const attempts = [{ credentials: "omit", mode: "cors" }];
+    if (!url.startsWith("data:")) attempts.push({ credentials: "include", mode: "cors" });
+    for (const init of attempts) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const res = await fetch(url, { ...init, signal: ctrl.signal });
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        if (!blob.size || blob.size > IMAGE_FETCH_MAX) continue;
+        const type = blob.type || "";
+        if (type && !type.startsWith("image/") && type !== "application/octet-stream") continue;
+        return blob;
+      } catch (err) {
+        // The next attempt, or the extension fetch, may still be able to read it.
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return null;
+  }
+
+  function decodeImageUrl(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      if (!url.startsWith("data:") && !url.startsWith("blob:")) img.crossOrigin = "anonymous";
+      img.onload = () => resolve(drawImageElement(img));
+      img.onerror = () => resolve("");
+      img.src = url;
+    });
+  }
+
+  async function rasterFromTarget(target) {
+    if (target.kind === "canvas") return drawImageElement(target.el);
+    const current = target.kind === "img" ? (target.el.currentSrc || target.el.src || "") : "";
+    const larger = !!(target.url && current && target.url.split("#")[0] !== current.split("#")[0]);
+    if (!larger && target.kind === "img") {
+      const drawn = drawImageElement(target.el);
+      if (drawn) return drawn;
+    }
+    if (target.url && target.url.startsWith("data:image/")) return target.url;
+    if (target.url) {
+      const blob = await fetchImageBlob(target.url);
+      if (blob) {
+        const dataUrl = await blobToDataUrlInPage(blob);
+        if (dataUrl) return dataUrl;
+      }
+      const decoded = await decodeImageUrl(target.url);
+      if (decoded) return decoded;
+      if (publicHttpUrl(target.url)) {
+        const viaExt = await sendRuntime({ type: "GLYPH_FETCH_IMAGE", url: target.url });
+        if (viaExt && viaExt.dataUrl) return viaExt.dataUrl;
+      }
+    }
+    if (target.kind === "img") return drawImageElement(target.el);
+    return "";
+  }
+
   /* ---------- Highlight tool ---------- */
 
-  const GLYPH_UI = ".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline";
+  const GLYPH_UI = ".glyph-overlay, .glyph-box, .glyph-card, .glyph-hl-outline, .glyph-img-hint";
   const SKIP_TEXT_PARENTS = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA|HEAD)$/;
   let hlOutline = null;
   let hlLockedOutline = null;
@@ -599,6 +1546,14 @@
     hlLockedRect = target.rect;
     if (hlOutline) hlOutline.style.display = "none";
     placeHighlight(hlLockedOutline, target.rect);
+    pinElement(
+      hlLockedOutline,
+      target.rect.left + target.rect.width / 2,
+      target.rect.top + target.rect.height / 2
+    );
+    const outlineLeft = parseFloat(hlLockedOutline.style.left) || 0;
+    const outlineTop = parseFloat(hlLockedOutline.style.top) || 0;
+    const cardShift = { dx: point.x - outlineLeft, dy: point.y - outlineTop };
     const pad = 4;
     const previewRect = {
       x: target.rect.left - pad,
@@ -614,7 +1569,8 @@
     // Build the card unpainted. A history shot hides page chrome for a frame,
     // and the font-source link can change the card's width — either one makes
     // the card flicker if it is already visible. Reveal it once both are done.
-    showCard(point.x, point.y, content, { hidden: true });
+    const origin = liveOrigin(hlLockedOutline, { x: outlineLeft, y: outlineTop });
+    showCard(origin.x + cardShift.dx, origin.y + cardShift.dy, content, { hidden: true });
     let dataUrl = "";
     if (saving) {
       try {
@@ -948,7 +1904,13 @@
     if (bold) styles.push({ letter: "B", title: "Bold", kind: "bold" });
     if (isItalicStyle(cs.fontStyle)) styles.push({ letter: "I", title: "Italic", kind: "italic" });
     if (hasUnderline(el)) styles.push({ letter: "U", title: "Underline", kind: "underline" });
-    return { properties, styles, swatchColor: cs.color };
+    return {
+      properties,
+      styles,
+      swatchColor: cs.color,
+      css: cssFromElement(el, painted),
+      fontStack: splitFontFamily(cs.fontFamily),
+    };
   }
 
   /* ---------- Native text selection ---------- */
@@ -1000,7 +1962,7 @@
 
   function dismissSelectionCard() {
     if (mode) return;
-    document.querySelectorAll(".glyph-card").forEach((n) => n.remove());
+    removeCards();
     card = null;
     lastSelectionFingerprint = "";
     if (selectionRememberTimer) {
@@ -1013,13 +1975,19 @@
     loadTheme();
     const x = target.rect.left;
     const y = target.rect.bottom;
+    const pinAt = {
+      x: target.rect.left + target.rect.width / 2,
+      y: target.rect.top + target.rect.height / 2,
+    };
     if (card && !mode) {
       updateCard(target.content);
       card.style.left = Math.min(x, window.innerWidth - 280) + "px";
       card.style.top = Math.min(y + 12, window.innerHeight - 80) + "px";
+      card._glyphPinAt = pinAt;
       card.classList.toggle("glyph-card--copy-below", card.getBoundingClientRect().top < 32);
+      pinCard(card);
     } else {
-      showCard(x, y, target.content, { keepTool: true });
+      showCard(x, y, target.content, { keepTool: true, pinAt });
     }
     const fingerprint = selectionFingerprint(target.content);
     if (fingerprint === lastSelectionFingerprint) return;
@@ -1122,8 +2090,12 @@
     '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><rect x="5.5" y="3.5" width="7" height="9" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.5 5.5h1.8v8.2c0 .7.6 1.3 1.3 1.3h5.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="7.2" y="1.5" width="3.6" height="2.4" rx="0.7" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
   const CHECK_ICON =
     '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3.5 8.5 6.6 11.5 12.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const CSS_ICON =
+    '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6.2 4.2 3 8l3.2 3.8" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.8 4.2 13 8l-3.2 3.8" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const GFONTS_ICON =
     '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M2.6 13 8 3 13.4 13" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.7 9.3h6.6" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"/></svg>';
+  const NO_SOURCE_ICON =
+    '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.45"/><path d="M4.3 11.7 11.7 4.3" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"/></svg>';
   const GENERIC_FONT_FAMILIES = new Set([
     "serif", "sans-serif", "monospace", "cursive", "fantasy",
     "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace", "ui-rounded",
@@ -1138,6 +2110,95 @@
     const first = props[0];
     if (first == null) return null;
     return String(typeof first === "string" ? first : first.value || "").trim();
+  }
+
+  function quoteCssFamily(name) {
+    const cleaned = String(name || "").replace(/["']/g, "").trim();
+    if (!cleaned || cleaned.toLowerCase() === "unknown") return "";
+    if (GENERIC_FONT_FAMILIES.has(cleaned.toLowerCase())) return cleaned;
+    return `"${cleaned.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+
+  function cssDeclarations(fields) {
+    const lines = [];
+    const push = (prop, value) => {
+      const v = String(value || "").trim();
+      if (v) lines.push(`${prop}: ${v};`);
+    };
+    push("font-family", fields.family);
+    push("font-size", fields.size);
+    push("font-weight", fields.weight);
+    push("font-style", fields.style);
+    push("line-height", fields.lineHeight);
+    push("letter-spacing", fields.letterSpacing);
+    push("color", fields.color);
+    push("text-decoration", fields.decoration);
+    push("text-transform", fields.transform);
+    return lines.join("\n");
+  }
+
+  function toCssColor(cssColor) {
+    const s = String(cssColor || "").trim();
+    const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/i);
+    if (!m) return s;
+    const hex = "#" + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
+    const alpha = m[4] === undefined ? 1 : Number(m[4]);
+    if (!(alpha < 1)) return hex;
+    const a = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+    return hex + a.toString(16).padStart(2, "0");
+  }
+
+  function meaningfulSpacing(value) {
+    const s = String(value || "").trim();
+    if (!s || s === "normal" || s === "0" || s === "0px") return "";
+    return s;
+  }
+
+  function textDecorationValue(el) {
+    const found = [];
+    const seen = new Set();
+    let node = el;
+    while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement) {
+      const line = getComputedStyle(node).textDecorationLine || "";
+      for (const part of line.split(/\s+/)) {
+        if (!part || part === "none" || seen.has(part)) continue;
+        seen.add(part);
+        found.push(part);
+      }
+      const tag = node.tagName;
+      if ((tag === "U" || tag === "INS") && !seen.has("underline")) {
+        seen.add("underline");
+        found.push("underline");
+      }
+      node = node.parentElement;
+    }
+    return found.join(" ");
+  }
+
+  function cssFromElement(el, painted) {
+    const cs = getComputedStyle(el);
+    const families = [];
+    const seen = new Set();
+    for (const name of [painted && painted.primary, ...((painted && painted.fallbacks) || [])]) {
+      const quoted = quoteCssFamily(name);
+      const key = quoted.toLowerCase();
+      if (!quoted || seen.has(key)) continue;
+      seen.add(key);
+      families.push(quoted);
+    }
+    const weightNum = Math.max(numericFontWeight(cs.fontWeight), variationWeight(cs));
+    const transform = String(cs.textTransform || "").trim();
+    return cssDeclarations({
+      family: families.join(", "),
+      size: cs.fontSize,
+      weight: weightNum ? String(Math.round(weightNum)) : String(cs.fontWeight || "").trim(),
+      style: String(cs.fontStyle || "normal").trim(),
+      lineHeight: String(cs.lineHeight || "").trim(),
+      letterSpacing: meaningfulSpacing(cs.letterSpacing),
+      color: toCssColor(cs.color),
+      decoration: textDecorationValue(el),
+      transform: transform && transform !== "none" ? transform : "",
+    });
   }
 
   function canResolveFontSource(name) {
@@ -1162,6 +2223,46 @@
     });
   }
 
+  function cardTools(host) {
+    let tools = host.querySelector(".glyph-card-tools");
+    if (!tools) {
+      tools = document.createElement("div");
+      tools.className = "glyph-card-tools";
+      host.appendChild(tools);
+    }
+    return tools;
+  }
+
+  function labelMissingFontSource(mark, family) {
+    const name = String(family || "").trim();
+    const label = name ? `No font page found for ${name}` : "No font page found";
+    mark.title = label;
+    mark.setAttribute("role", "img");
+    mark.setAttribute("aria-label", label);
+  }
+
+  function applyMissingFontSource(host, family, pending) {
+    host.classList.add("glyph-card--has-gfonts");
+    let mark = host.querySelector(".glyph-card-gfonts");
+    if (!mark || !mark.classList.contains("glyph-card-gfonts--none")) {
+      if (mark) mark.remove();
+      mark = document.createElement("span");
+      mark.className = "glyph-card-gfonts glyph-card-gfonts--none";
+      mark.innerHTML = NO_SOURCE_ICON;
+      cardTools(host).appendChild(mark);
+    }
+    mark.classList.toggle("glyph-card-gfonts--pending", !!pending);
+    if (pending) {
+      const name = String(family || "").trim();
+      const label = name ? `Checking font sites for ${name}` : "Checking font sites";
+      mark.title = label;
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", label);
+      return;
+    }
+    labelMissingFontSource(mark, family);
+  }
+
   function applyFontSourceButton(host, family, source) {
     let link = host.querySelector(".glyph-card-gfonts");
     const url = source && source.url;
@@ -1173,43 +2274,121 @@
       return;
     }
     host.classList.add("glyph-card--has-gfonts");
-    if (!link) {
-      link = document.createElement("a");
+    if (!link || link.tagName !== "BUTTON") {
+      if (link) link.remove();
+      link = document.createElement("button");
+      link.type = "button";
       link.className = "glyph-card-gfonts";
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
       link.innerHTML = GFONTS_ICON;
-      link.addEventListener("click", (e) => e.stopPropagation());
-      const close = host.querySelector(".glyph-card-close");
-      if (close) host.insertBefore(link, close);
-      else host.appendChild(link);
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const href = link.dataset.url;
+        if (href) window.open(href, "_blank", "noopener,noreferrer");
+      });
+      cardTools(host).appendChild(link);
     }
     const label = source.label || "Font source";
-    link.href = url;
+    link.dataset.url = url;
     link.title = "View on " + label;
     link.setAttribute("aria-label", `View ${family} on ${label}`);
   }
 
+  function syncCssButton(host, content) {
+    const css = content && typeof content.css === "string" ? content.css.trim() : "";
+    let btn = host.querySelector(".glyph-card-css");
+    if (!css) {
+      if (btn) btn.remove();
+      host.classList.remove("glyph-card--has-css");
+      return;
+    }
+    host.classList.add("glyph-card--has-css");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "glyph-card-css";
+      btn.title = "Copy CSS";
+      btn.setAttribute("aria-label", "Copy CSS");
+      btn.innerHTML = CSS_ICON;
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = btn._glyphCss || "";
+        if (!text || !(await copyText(text))) return;
+        btn.innerHTML = CHECK_ICON;
+        btn.classList.add("glyph-card-css--done");
+        btn.title = "Copied";
+        btn.setAttribute("aria-label", "Copied");
+        clearTimeout(btn._glyphCopyTimer);
+        btn._glyphCopyTimer = setTimeout(() => {
+          if (!btn.isConnected) return;
+          btn.innerHTML = CSS_ICON;
+          btn.classList.remove("glyph-card-css--done");
+          btn.title = "Copy CSS";
+          btn.setAttribute("aria-label", "Copy CSS");
+        }, 1200);
+      });
+      cardTools(host).appendChild(btn);
+    }
+    btn._glyphCss = css;
+  }
+
+  function isPrivateFontName(name) {
+    const family = String(name || "").trim();
+    if (family.startsWith("__")) return true;
+    return /_[a-f0-9]{6,}$/i.test(family);
+  }
+
+  function sourceNameCandidates(content) {
+    const names = [];
+    const add = (name) => {
+      const cleaned = String(name || "").replace(/["']/g, "").trim();
+      if (!cleaned || !canResolveFontSource(cleaned) || isPrivateFontName(cleaned)) return;
+      if (names.some((item) => item.toLowerCase() === cleaned.toLowerCase())) return;
+      names.push(cleaned);
+    };
+    add(fontNameFromContent(content));
+    const stack = content && content.fontStack;
+    if (Array.isArray(stack)) stack.forEach(add);
+    const props = content && content.properties;
+    if (Array.isArray(props)) {
+      props.forEach((prop) => {
+        if (!prop || !prop.after || !/for some characters/i.test(prop.after)) return;
+        String(prop.value || "").split(",").forEach(add);
+      });
+    }
+    return names.slice(0, 4);
+  }
+
   async function syncFontSourceButton(host, content) {
-    const family = fontNameFromContent(content);
     const token = (host._glyphSourceToken = (host._glyphSourceToken || 0) + 1);
-    if (!canResolveFontSource(family)) {
-      applyFontSourceButton(host, family, null);
-      return;
+    const names = sourceNameCandidates(content);
+    const primary = names[0] || "";
+    const family = primary || fontNameFromContent(content);
+    // Keep a no symbol in the slot until a catalog confirms a real page.
+    // A guessed Google Fonts specimen link opens a missing font page.
+    if (primary) applyMissingFontSource(host, family, true);
+    for (const candidate of names) {
+      const source = await requestFontSource(candidate);
+      if (!host.isConnected || host._glyphSourceToken !== token) return;
+      if (source && source.url) {
+        applyFontSourceButton(host, candidate, source);
+        return;
+      }
     }
-    const source = await requestFontSource(family);
     if (!host.isConnected || host._glyphSourceToken !== token) return;
-    if (source) {
-      applyFontSourceButton(host, family, source);
+    const matchUrl = content && content.matchUrl;
+    if (matchUrl) {
+      applyFontSourceButton(host, fontNameFromContent(content), { url: matchUrl, label: "WhatFontIs" });
       return;
     }
-    const matchUrl = content && content.matchUrl;
-    applyFontSourceButton(host, family, matchUrl ? { url: matchUrl, label: "WhatFontIs" } : null);
+    if (primary) applyMissingFontSource(host, family, false);
+    else applyFontSourceButton(host, family, null);
   }
 
   const HISTORY_KEY = "fontHistory";
   const SAVE_HISTORY_KEY = "saveFontHistory";
-  const HISTORY_LIMIT = 10;
+  const HISTORY_LIMIT = 20;
 
   async function historySavingEnabled() {
     try {
@@ -1251,6 +2430,7 @@
     };
     if (previewDataUrl) entry.preview = previewDataUrl;
     if (content.matchUrl) entry.matchUrl = content.matchUrl;
+    if (typeof content.css === "string" && content.css.trim()) entry.css = content.css.trim();
     const sampleText = truncateSampleText(content.sampleText);
     if (sampleText) entry.sampleText = sampleText;
     try {
@@ -1364,6 +2544,10 @@
       matchUrl: data?.matchUrl || "",
     };
     if (color) content.swatchColor = color;
+    content.css = cssDeclarations({
+      family: quoteCssFamily(font),
+      color: color ? toCssColor(color) : "",
+    });
     return content;
   }
 
@@ -1390,6 +2574,14 @@
     if (data?.underline) styles.push({ letter: "U", title: "Underline", kind: "underline" });
     const content = { properties, styles };
     if (color) content.swatchColor = color;
+    content.css = cssDeclarations({
+      family: quoteCssFamily(font),
+      size: size ? size + "px" : "",
+      weight: weight ? String(weight) : "",
+      style: data?.italic ? "italic" : "",
+      color: color ? toCssColor(color) : "",
+      decoration: data?.underline ? "underline" : "",
+    });
     return content;
   }
 
@@ -1464,6 +2656,7 @@
     body.replaceChildren();
     if (typeof content === "string") {
       body.textContent = content;
+      if (content.includes("\n")) body.style.whiteSpace = "pre-line";
       return;
     }
     const props = Array.isArray(content) ? content : content.properties || [];
@@ -1486,16 +2679,18 @@
   }
 
   function showCard(x, y, content, options) {
-    document.querySelectorAll(".glyph-card").forEach((n) => n.remove());
+    removeCards();
     card = buildCard(content, options);
+    if (options && options.pinAt) card._glyphPinAt = options.pinAt;
     placeCard(card, x, y + 12);
     if (options && options.hidden) card.style.visibility = "hidden";
     document.body.appendChild(card);
     if (card.getBoundingClientRect().top < 32) card.classList.add("glyph-card--copy-below");
+    pinCard(card);
   }
 
   function showResultCards(x, y, contents) {
-    document.querySelectorAll(".glyph-card").forEach((n) => n.remove());
+    removeCards();
     const nodes = contents.map((content) => buildCard(content, { stack: true }));
     const left = Math.min(x, window.innerWidth - 280);
     let top = y + 12;
@@ -1513,6 +2708,7 @@
     }
     nodes.forEach((node) => {
       if (node.getBoundingClientRect().top < 32) node.classList.add("glyph-card--copy-below");
+      pinCard(node);
     });
     card = nodes[0] || null;
   }
@@ -1545,6 +2741,7 @@
       e.preventDefault();
       e.stopPropagation();
       if (options && options.stack) {
+        releasePin(node);
         node.remove();
         const rest = document.querySelectorAll(".glyph-card");
         if (!rest.length) cleanup();
@@ -1559,7 +2756,8 @@
       }
       cleanup();
     });
-    node.appendChild(close);
+    cardTools(node).appendChild(close);
+    syncCssButton(node, content);
     node._glyphSourceReady = syncFontSourceButton(node, content);
     return node;
   }
@@ -1568,6 +2766,7 @@
     if (!card) return;
     const body = card.querySelector(".glyph-card-body");
     if (body) fillCardBody(body, content);
+    syncCssButton(card, content);
     syncFontSourceButton(card, content);
   }
 

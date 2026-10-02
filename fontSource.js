@@ -17,7 +17,7 @@ const GENERIC_FONT_FAMILIES = new Set([
   "status-bar", "blinkmacsystemfont",
 ]);
 
-const WEIGHT_SUFFIX = /\s+(?:thin|hairline|ultra\s*light|extra\s*light|light|regular|book|roman|normal|medium|semi(?:\s*|-)?bold|demi(?:\s*|-)?bold|bold|extra\s*bold|ultra\s*bold|black|heavy|italic|oblique)(?:\s+(?:italic|oblique))*$/i;
+const WEIGHT_SUFFIX = /\s+(?:thin|hairline|ultra\s*light|extra\s*light|light|regular|book|roman|normal|medium|semi(?:\s*|-)?bold|demi(?:\s*|-)?bold|bold|extra\s*bold|ultra\s*bold|black|heavy|italic|oblique|variable|var)(?:\s+(?:italic|oblique))*$/i;
 
 const MS = (slug) => ({
   url: "https://learn.microsoft.com/en-us/typography/font-list/" + slug,
@@ -267,7 +267,8 @@ async function googleFontsSource(name) {
     // License-preview kits return CSS with /l/font? and are not Google Fonts listings.
     if (!text.includes("@font-face") || text.includes("/l/font?")) return null;
     if (!/fonts\.gstatic\.com\/s\//.test(text)) return null;
-    const url = googleSpecimenUrl(name);
+    const canonical = (text.match(/font-family:\s*'([^']+)'/) || [])[1] || name;
+    const url = googleSpecimenUrl(canonical);
     return url ? { url, label: "Google Fonts" } : null;
   } catch (err) {
     return null;

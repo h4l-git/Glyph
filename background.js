@@ -5,16 +5,156 @@ try {
   // wfiKey.js is local. Snip stays off until that file defines WFI_API_KEY.
 }
 
-const BADGE_TEXT = { snip: "✂", highlight: "🖍" };
+const BADGE_TEXT = { snip: "✂", highlight: "🖍", image: "▣" };
 const SELECTION_CARD_KEY = "selectionCard";
 const SELECTION_SCRIPT_ID = "glyph-selection";
 const SELECTION_ORIGINS = ["http://*/*", "https://*/*"];
+
+// Sharper snip zooms the tab, captures, then puts the zoom back. Per-tab scope
+// keeps that change off the site's saved zoom. Put the old factor back before
+// leaving per-tab mode: Chrome saves the current factor onto the site when a
+// tab returns to per-origin and that site has no zoom of its own. A stale end
+// must not undo a newer snip.
+const SHARP_MAX_ZOOM = 5;
+const SHARP_MIN_GAIN = 1.15;
+const sharpSessions = new Map();
+let sharpZoomQueue = Promise.resolve();
+let sharpZoomSeq = 0;
+
+function queueSharpZoom(task) {
+  const run = sharpZoomQueue.then(task, task);
+  sharpZoomQueue = run.then(() => {}, () => {});
+  return run;
+}
+
+function sharpZoomState(previous, changedSettings) {
+  return {
+    zoom: previous.zoom,
+    mode: previous.mode || "automatic",
+    scope: previous.scope || "per-origin",
+    changedSettings: !!changedSettings,
+  };
+}
+
+async function restoreTabZoom(tabId, previous, changedSettings) {
+  await chrome.tabs.setZoom(tabId, previous.zoom);
+  if (!changedSettings) return;
+  const mode = previous.mode || "automatic";
+  const payload = { mode };
+  // Manual and disabled zoom ignore scope. Per-origin is only valid in automatic mode.
+  if (mode === "automatic") payload.scope = previous.scope || "per-origin";
+  await chrome.tabs.setZoomSettings(tabId, payload);
+  const restored = await chrome.tabs.getZoom(tabId);
+  if (Math.abs(restored - previous.zoom) > 0.01) await chrome.tabs.setZoom(tabId, previous.zoom);
+}
+
+function scheduleZoomRecheck(tabId, zoom) {
+  setTimeout(() => {
+    queueSharpZoom(async () => {
+      const active = sharpSessions.get(tabId);
+      if (active) return;
+      try {
+        const now = await chrome.tabs.getZoom(tabId);
+        if (Math.abs(now - zoom) > 0.01) await chrome.tabs.setZoom(tabId, zoom);
+      } catch (err) {
+        // The tab can close before the late zoom check.
+      }
+    });
+  }, 200);
+}
+
+async function beginSharpZoom(tabId, ratio) {
+  await endSharpZoom(tabId, 0);
+  if (!Number.isFinite(ratio) || ratio < SHARP_MIN_GAIN) return { ok: false };
+  let current = 1;
+  let settings = { mode: "automatic", scope: "per-origin", defaultZoomFactor: 1 };
+  try {
+    current = await chrome.tabs.getZoom(tabId);
+    settings = await chrome.tabs.getZoomSettings(tabId);
+  } catch (err) {
+    return { ok: false };
+  }
+  const wanted = Math.min(SHARP_MAX_ZOOM, Math.round(current * ratio * 100) / 100);
+  if (!Number.isFinite(wanted) || wanted < current * SHARP_MIN_GAIN) return { ok: false };
+  const previous = {
+    zoom: current,
+    mode: settings.mode,
+    scope: settings.scope,
+  };
+  const id = ++sharpZoomSeq;
+  const timer = setTimeout(() => {
+    queueSharpZoom(() => endSharpZoom(tabId, id));
+  }, 12000);
+  sharpSessions.set(tabId, { id, previous, timer, changedSettings: false });
+  try {
+    if (previous.scope !== "per-tab" || previous.mode === "disabled") {
+      try {
+        await chrome.tabs.setZoomSettings(tabId, { mode: "automatic", scope: "per-tab" });
+        const session = sharpSessions.get(tabId);
+        if (session && session.id === id) session.changedSettings = true;
+      } catch (err) {
+        // The tab can still zoom when its saved zoom settings cannot be changed.
+      }
+    }
+    await chrome.tabs.setZoom(tabId, wanted);
+    const session = sharpSessions.get(tabId);
+    return {
+      ok: true,
+      id,
+      zoom: sharpZoomState(previous, session && session.changedSettings),
+    };
+  } catch (err) {
+    await endSharpZoom(tabId, id);
+    return { ok: false };
+  }
+}
+
+async function endSharpZoom(tabId, id, fallback) {
+  const session = sharpSessions.get(tabId);
+  if (session && id && session.id !== id) return { ok: true };
+
+  let previous = null;
+  let changedSettings = false;
+  if (session) {
+    sharpSessions.delete(tabId);
+    clearTimeout(session.timer);
+    previous = session.previous;
+    changedSettings = session.changedSettings;
+  } else if (fallback && Number(fallback.zoom) > 0) {
+    // The worker can restart between the zoom and its restore. The page still
+    // has the factor from when the snip began.
+    previous = {
+      zoom: Number(fallback.zoom),
+      mode: fallback.mode || "automatic",
+      scope: fallback.scope || "per-origin",
+    };
+    changedSettings = !!fallback.changedSettings;
+  }
+  if (!previous || !(previous.zoom > 0)) return { ok: true };
+  try {
+    await restoreTabZoom(tabId, previous, changedSettings);
+  } catch (err) {
+    // The tab can close before the zoom is restored.
+  }
+  scheduleZoomRecheck(tabId, previous.zoom);
+  return { ok: true };
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "GLYPH_CAPTURE") {
     chrome.tabs.captureVisibleTab({ format: "png" }, (dataUrl) => {
       sendResponse({ dataUrl });
     });
+    return true;
+  }
+  if (msg.type === "GLYPH_ZOOM_BEGIN" && sender.tab?.id != null) {
+    const tabId = sender.tab.id;
+    queueSharpZoom(() => beginSharpZoom(tabId, Number(msg.ratio))).then(sendResponse);
+    return true;
+  }
+  if (msg.type === "GLYPH_ZOOM_END" && sender.tab?.id != null) {
+    const tabId = sender.tab.id;
+    queueSharpZoom(() => endSharpZoom(tabId, Number(msg.id) || 0, msg.zoom || null)).then(sendResponse);
     return true;
   }
   if (msg.type === "GLYPH_MODE_CHANGED" && sender.tab?.id != null) {
@@ -38,8 +178,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+  if (msg.type === "GLYPH_SNIP_QUOTA") {
+    readWfiUsage().then(sendResponse);
+    return true;
+  }
   if (msg.type === "GLYPH_IDENTIFY") {
-    identifySnip(msg.image, msg.fallbackImage).then(sendResponse);
+    identifySnip(msg.image, msg.fallbackImage, {
+      detectText: msg.detectText === true,
+      imageUrl: typeof msg.imageUrl === "string" ? msg.imageUrl : "",
+    }).then(sendResponse);
+    return true;
+  }
+  if (msg.type === "GLYPH_FETCH_IMAGE") {
+    fetchImageForIdentify(msg.url).then(sendResponse);
     return true;
   }
 });
@@ -247,6 +398,47 @@ async function identifyWithClaude(dataUrl) {
 
 const WFI_URL = "https://www.whatfontis.com/api2/index.php";
 const WFI_LIMIT = 4;
+const WFI_SNIP_LIMIT = 20;
+const WFI_USAGE_KEY = "wfiSnipUsage";
+let wfiUsageChain = Promise.resolve();
+
+// WhatFontIs daily quota resets at 00:00 UTC.
+function wfiPeriod(now = Date.now()) {
+  const date = new Date(now);
+  const start = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return { day: new Date(start).toISOString().slice(0, 10), resetAt: start + 24 * 60 * 60 * 1000 };
+}
+
+function withWfiUsage(task) {
+  const run = wfiUsageChain.then(task, task);
+  wfiUsageChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function readWfiUsage(now = Date.now()) {
+  const period = wfiPeriod(now);
+  const stored = await chrome.storage.local.get(WFI_USAGE_KEY);
+  const usage = stored[WFI_USAGE_KEY];
+  const count = usage && usage.day === period.day ? Math.max(0, Number(usage.count) || 0) : 0;
+  return {
+    count,
+    limit: WFI_SNIP_LIMIT,
+    resetAt: period.resetAt,
+    limited: count >= WFI_SNIP_LIMIT,
+  };
+}
+
+async function writeWfiCount(count, now = Date.now()) {
+  const period = wfiPeriod(now);
+  const next = Math.max(0, count);
+  await chrome.storage.local.set({ [WFI_USAGE_KEY]: { day: period.day, count: next } });
+  return {
+    count: next,
+    limit: WFI_SNIP_LIMIT,
+    resetAt: period.resetAt,
+    limited: next >= WFI_SNIP_LIMIT,
+  };
+}
 
 function matchFamilyName(value) {
   const name = String(value || "").replace(/["']/g, "").replace(/\s+/g, " ").trim();
@@ -269,6 +461,8 @@ function wfiErrorFrom(status, body) {
   const text = String(body || "").toLowerCase();
   if (status === 409) return "wfi_unauthorized";
   if (status === 402 || status === 429) return "wfi_quota";
+  // A crop with no letters is HTTP 420 and this body. Not an outage.
+  if (text.includes("invalid response from ai")) return "no_font";
   if (status === 420 || status === 503 || status >= 500) return "wfi_down";
   if (status === 422) {
     if (text.includes("mysql") || text.includes("server error")) return "wfi_down";
@@ -304,23 +498,60 @@ function parseWfiMatches(parsed) {
   return { fonts: [primary], engine: "whatfontis" };
 }
 
-async function identifyWithWhatFontIs(dataUrl) {
-  const key = (typeof WFI_API_KEY === "string" ? WFI_API_KEY : "").trim();
-  if (!key) return { error: "no_wfi_key" };
+async function identifyWithWhatFontIs(dataUrl, options) {
+  return withWfiUsage(() => identifyWithWhatFontIsUnlocked(dataUrl, options));
+}
+
+async function identifyWithWhatFontIsFromUrl(url) {
+  return withWfiUsage(() => identifyWithWhatFontIsFromUrlUnlocked(url));
+}
+
+async function identifyWithWhatFontIsUnlocked(dataUrl, options) {
   const image = splitDataUrl(dataUrl);
   if (!image) return { error: "bad_image" };
   // Same envelope the WhatFontIs clients post as multipart field "file".
-  // The crop is already the text, so skip their text-box search.
+  // A snip crop is already the text, so skip their text-box search.
+  // A whole picture still needs that search.
+  const info = {
+    urlimagebase64: image.data,
+    limit: WFI_LIMIT,
+  };
+  if (!options || !options.detectText) info.NOTTEXTBOXSDETECTION = 1;
+  return postWhatFontIs(info, true);
+}
+
+function whatFontIsImageUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    if (url.username || url.password) return "";
+    return url.href;
+  } catch (err) {
+    return "";
+  }
+}
+
+async function identifyWithWhatFontIsFromUrlUnlocked(raw) {
+  const url = whatFontIsImageUrl(raw);
+  if (!url) return { error: "bad_image" };
+  return postWhatFontIs({
+    urlimage: url,
+    NOTTEXTBOXSDETECTION: 0,
+    limit: WFI_LIMIT,
+  }, false);
+}
+
+async function postWhatFontIs(info, base64) {
+  const usage = await readWfiUsage();
+  if (usage.limited) return { error: "snip_limit", resetAt: usage.resetAt };
+  const key = (typeof WFI_API_KEY === "string" ? WFI_API_KEY : "").trim();
+  if (!key) return { error: "no_wfi_key" };
   const envelope = {
     FONT: {
       API_KEY: key,
-      BASE64: 1,
+      BASE64: base64 ? 1 : 0,
       WANT_QUOTA: 1,
-      INFO: {
-        urlimagebase64: image.data,
-        NOTTEXTBOXSDETECTION: 1,
-        limit: WFI_LIMIT,
-      },
+      INFO: info,
     },
   };
   const form = new FormData();
@@ -338,6 +569,11 @@ async function identifyWithWhatFontIs(dataUrl) {
   }
 
   const bodyText = await resp.text();
+  if (wfiErrorFrom(resp.status, bodyText) === "wfi_quota") {
+    const exhausted = await writeWfiCount(WFI_SNIP_LIMIT);
+    return { error: "snip_limit", resetAt: exhausted.resetAt };
+  }
+  await writeWfiCount(usage.count + 1);
   if (!resp.ok) return { error: wfiErrorFrom(resp.status, bodyText) };
 
   let parsed;
@@ -349,10 +585,79 @@ async function identifyWithWhatFontIs(dataUrl) {
   return parseWfiMatches(parsed) || { error: "no_chars" };
 }
 
-async function identifySnip(image, fallbackImage) {
-  const matched = await identifyWithWhatFontIs(image);
+const IMAGE_FETCH_MAX = 18 * 1024 * 1024;
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function dataUrlFromFetchedImage(blob) {
+  if (!blob || !blob.size || blob.size > IMAGE_FETCH_MAX) return "";
+  const type = blob.type || "";
+  if (type && !type.startsWith("image/")) return "";
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const maxLong = 2000;
+    const scale = Math.min(1, maxLong / Math.max(bitmap.width, bitmap.height, 1));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    const outType = type === "image/jpeg" ? "image/jpeg" : "image/png";
+    const out = await canvas.convertToBlob({ type: outType, quality: 0.9 });
+    return await blobToDataUrl(out);
+  } catch (err) {
+    if (blob.size > 4 * 1024 * 1024) return "";
+    return await blobToDataUrl(blob);
+  }
+}
+
+async function fetchImageForIdentify(raw) {
+  const url = whatFontIsImageUrl(raw);
+  if (!url) return { dataUrl: "" };
+  let allowed = false;
+  try {
+    allowed = await chrome.permissions.contains({ origins: [`${new URL(url).origin}/*`] });
+  } catch (err) {
+    allowed = false;
+  }
+  if (!allowed) return { dataUrl: "" };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const resp = await fetch(url, { credentials: "include", signal: ctrl.signal });
+    if (!resp.ok) return { dataUrl: "" };
+    const dataUrl = await dataUrlFromFetchedImage(await resp.blob());
+    return { dataUrl };
+  } catch (err) {
+    return { dataUrl: "" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function claudeSnipSelected(id) {
+  return Object.prototype.hasOwnProperty.call(IDENTIFY_MODELS, id);
+}
+
+async function identifySnip(image, fallbackImage, options) {
+  const { snipModel } = await chrome.storage.local.get("snipModel");
+  const detectText = !!(options && options.detectText);
+  const imageUrl = options && typeof options.imageUrl === "string" ? options.imageUrl : "";
+  const matched = image
+    ? await identifyWithWhatFontIs(image, { detectText })
+    : imageUrl
+      ? await identifyWithWhatFontIsFromUrl(imageUrl)
+      : { error: "bad_image" };
   if (!matched.error) return matched;
-  if (matched.error !== "no_chars" || !fallbackImage) return matched;
+  if (!claudeSnipSelected(snipModel) || matched.error !== "no_chars" || !fallbackImage) return matched;
   const guessed = await identifyWithClaude(fallbackImage);
   if (guessed.error === "no_key") return matched;
   if (guessed.error) return guessed;
@@ -369,6 +674,15 @@ function isRestricted(url) {
 // transparent in-page iframe (Chrome's native popup cannot have a transparent
 // backdrop, so its corners can't be rounded). On pages that can't be scripted
 // a small native popup explains that Glyph can't run there, enabled per tab.
+async function showUnavailablePopup(tabId) {
+  await chrome.action.setPopup({ tabId, popup: "unavailable.html" });
+  try {
+    await chrome.action.openPopup();
+  } catch (err) {
+    // Older Chrome: the popup will show on the next click instead.
+  }
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab?.id) return;
   if (!isRestricted(tab.url)) {
@@ -379,12 +693,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       // Fall through to the native popup.
     }
   }
-  await chrome.action.setPopup({ tabId: tab.id, popup: "unavailable.html" });
-  try {
-    await chrome.action.openPopup();
-  } catch (err) {
-    // Older Chrome: the popup will show on the next click instead.
-  }
+  await showUnavailablePopup(tab.id);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
@@ -400,8 +709,24 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (!mode) return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
-  await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
-  await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
+  if (isRestricted(tab.url)) {
+    await showUnavailablePopup(tab.id);
+    return;
+  }
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] });
+  } catch (err) {
+    await showUnavailablePopup(tab.id);
+    return;
+  }
+  if (mode === "snip") {
+    const usage = await readWfiUsage();
+    if (usage.limited) {
+      chrome.tabs.sendMessage(tab.id, { type: "GLYPH_SNIP_LIMIT", resetAt: usage.resetAt });
+      return;
+    }
+  }
   chrome.tabs.sendMessage(tab.id, { type: "GLYPH_START", mode });
 });
 

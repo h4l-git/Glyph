@@ -68,15 +68,16 @@ li { margin-bottom: 6px; }
 <main>
   <a class="back" href="../">&larr; Back to Glyph</a>
   <h1 class="display">Privacy Policy</h1>
-  <p class="updated">Last updated: 30 September 2026</p>
+  <p class="updated">Last updated: 2 October 2026</p>
 
   <p>Glyph is a Chrome extension that identifies the font used in text on a webpage. This page explains what data Glyph accesses, stores, and sends, and why.</p>
 
   <h2>What Glyph accesses</h2>
   <ul>
-    <li><strong>Page content, only when you start a tool or enable text selection.</strong> Glyph only reads or captures anything from a page after you click "Snip tool" or "Highlight tool" in the popup, use a keyboard shortcut, or turn on "Show card on text selection" in Settings. With that setting off, it does not run in the background or read pages automatically.</li>
-    <li><strong>Snip tool:</strong> captures a screenshot of the region you select, so the image can be sent to WhatFontIs for font identification. If WhatFontIs can't separate the letters and you have saved an Anthropic API key, that same crop is also sent to Anthropic.</li>
-    <li><strong>Highlight tool:</strong> reads the computed CSS (font family, weight, size) of the element you click. This never leaves your device - it's shown directly in the result card.</li>
+    <li><strong>Page content, only when you start a tool or enable text selection.</strong> Glyph only reads or captures anything from a page after you click "Snip tool", "Image Selector", or "Highlight text" in the popup, use a keyboard shortcut, or turn on "Show card on text selection" in Settings. With that setting off, it does not run in the background or read pages automatically.</li>
+    <li><strong>Snip tool:</strong> captures a screenshot of the region you select, so the image can be sent to WhatFontIs for font identification. If Sharper snip is on, Glyph briefly zooms that tab so the letters are drawn larger, captures the screenshot, then restores your previous zoom. If you selected a Claude model, WhatFontIs can't separate the letters, and you have saved an Anthropic API key, that same crop is also sent to Anthropic.</li>
+    <li><strong>Image Selector:</strong> reads the picture you click, including an image, a canvas, or a picture used as a background, and prefers a larger version than the one drawn on the page, so that file can be sent to WhatFontIs. To read it, Glyph may request the picture from the site that hosts it. That request tries without cookies first, and retries with that site's cookies only if the file still cannot be read. If you have allowed Glyph to run on websites, the extension may fetch the same picture the same way. Those cookies stay with the site that hosts the picture. They are not sent to WhatFontIs or Anthropic. If the file still cannot be read, Glyph sends the picture's web address instead, and WhatFontIs fetches it. If you selected a Claude model, WhatFontIs can't separate the letters, and you have saved an Anthropic API key, the picture is also sent to Anthropic.</li>
+    <li><strong>Highlight text:</strong> reads the computed CSS (font family, weight, size) of the element you click. This never leaves your device - it's shown directly in the result card.</li>
     <li><strong>Text selection (optional):</strong> if you enable it in Settings, Glyph reads the computed CSS of text you highlight with your cursor and shows the same result card. Chrome will ask for permission to run on websites you visit. You can turn this off at any time.</li>
   </ul>
 
@@ -84,19 +85,22 @@ li { margin-bottom: 6px; }
   <p>Glyph stores the following locally on your device using Chrome's <code>storage</code> API. None of this is synced to any account or server we control:</p>
   <ul>
     <li>Your Anthropic API key, if you choose to add one</li>
-    <li>The Claude model you choose for the Snip tool</li>
+    <li>The Snip identification model you choose (WhatFontIs, or a Claude model)</li>
     <li>Your light/dark theme preference</li>
-    <li>Your keyboard shortcut settings</li>
     <li>Which corner the window opens in, and its size if you resize it</li>
     <li>Whether "Show card on text selection" is enabled</li>
     <li>Whether "Save font history" is enabled</li>
-    <li>Recent font identifications, while saving is on (up to 10): the font details, a short text sample, the page address and title, and a cropped preview of the region you selected</li>
-    <li>Fonts you save from History, which stay on this device until you remove them</li>
+    <li>Whether "Sharper snip" is enabled</li>
+    <li>Whether the saved and recent lists in History are collapsed</li>
+    <li>How many Snip and Image Selector identifications you have used today, and which UTC day that count belongs to</li>
+    <li>Recent font identifications, while saving is on (up to 20): the font details, a short text sample, the page address and title, a cropped preview of the region or picture, and a WhatFontIs page link when the match includes one</li>
+    <li>Fonts you save from History (up to 50), which stay on this device until you remove them</li>
     <li>A short local cache of font-source lookups (family name → official page URL) and catalog indexes, used only to resolve download/specimen links</li>
   </ul>
+  <p>Keyboard shortcuts are kept by Chrome in its own shortcut settings. Glyph only reads them to show the current Snip and Highlight text shortcuts.</p>
 
   <h2>What Glyph sends, and to whom</h2>
-  <p>When you use the Snip tool, the cropped image is sent to WhatFontIs (<code>www.whatfontis.com</code>) with Glyph's own API key, which is built into the extension, so WhatFontIs can match the letterforms against its catalog. You do not provide that key. The extension sends the request itself; the webpage does not receive it. This only happens when you actively use the Snip tool. If WhatFontIs can't separate the letters and you have saved an Anthropic API key, Glyph also sends that crop with your Anthropic key and the Claude model you selected to Anthropic (<code>api.anthropic.com</code>). History, saved fonts, page addresses, and preview images stay on your device and are not uploaded. When you open a font preview in History, Glyph may also load that typeface from Google Fonts (their official stylesheet) so it can show a live text sample; installed and generic fonts are rendered locally and nothing is fetched.</p>
+  <p>When you use the Snip tool, the cropped image is sent to WhatFontIs (<code>www.whatfontis.com</code>) with Glyph's own API key, which is built into the extension, so WhatFontIs can match the letterforms against its catalog. Image Selector sends the picture file you clicked, or, if that file cannot be read, the picture's web address so WhatFontIs can fetch it. You do not provide that key. The extension sends the request itself; the webpage does not receive it. This only happens when you actively use Snip or Image Selector, and only within the 20 identifications those tools share each UTC day. If you selected a Claude model, WhatFontIs can't separate the letters, and you have saved an Anthropic API key, Glyph also sends that image with your Anthropic key and the Claude model you selected to Anthropic (<code>api.anthropic.com</code>). History, saved fonts, page addresses, the daily count, and preview images stay on your device and are not uploaded. The one exception is Image Selector: when the picture file cannot be read, Glyph sends that picture's web address to WhatFontIs. When you open a font preview in History, Glyph may also load that typeface from Google Fonts (their official stylesheet) so it can show a live text sample; installed and generic fonts are rendered locally and nothing is fetched.</p>
   <p>When Glyph shows a result, it may also query public font catalogs to find an official specimen or download page for the identified family. Those requests send only the font family name - not the page you were viewing, screenshots, or other browsing data. Glyph may contact:</p>
   <ul>
     <li><strong>Google Fonts</strong> (<code>fonts.googleapis.com</code>) - to check whether the family is listed there</li>
@@ -109,13 +113,13 @@ li { margin-bottom: 6px; }
 
   <h2>Permissions</h2>
   <ul>
-    <li><strong>activeTab</strong> - lets Glyph run its tools in the tab you're viewing, only after you click a button in the popup.</li>
-    <li><strong>scripting</strong> - lets Glyph inject the Snip/Highlight tool overlay into the page on demand.</li>
-    <li><strong>storage</strong> - lets Glyph save your settings, font history, saved fonts, and the font-source cache locally, as described above.</li>
-    <li><strong>Access to WhatFontIs</strong> - lets the Snip tool send the cropped image with Glyph's API key, as described above.</li>
-    <li><strong>Access to Anthropic</strong> - lets Snip send the cropped image with your Anthropic API key when WhatFontIs can't separate the letters, as described above.</li>
+    <li><strong>activeTab</strong> - lets Glyph run its tools in the tab you're viewing, only after you click the toolbar icon, start a tool, or use a keyboard shortcut.</li>
+    <li><strong>scripting</strong> - lets Glyph inject the Snip, Image Selector, and Highlight text overlays into the page on demand.</li>
+    <li><strong>storage</strong> - lets Glyph save your settings, font history, saved fonts, the daily identification count, and the font-source cache locally, as described above.</li>
+    <li><strong>Access to WhatFontIs</strong> - lets Snip and Image Selector send the image with Glyph's API key, as described above.</li>
+    <li><strong>Access to Anthropic</strong> - lets Snip and Image Selector send the image with your Anthropic API key when you selected a Claude model and WhatFontIs can't separate the letters, as described above.</li>
     <li><strong>Access to font catalog sites</strong> - lets Glyph resolve an official page for an identified font, as described above.</li>
-    <li><strong>Optional access to websites</strong> - requested only if you enable "Show card on text selection", so Glyph can identify fonts when you highlight text.</li>
+    <li><strong>Optional access to websites</strong> - requested if you enable "Show card on text selection", and the first time you use Image Selector, so Glyph can read picture files the page does not expose directly. If you decline, Image Selector still sends pictures it can read, and public picture addresses.</li>
   </ul>
 
   <h2>Contact</h2>

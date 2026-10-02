@@ -6,6 +6,35 @@
   background: rgba(0, 0, 0, 0.12);
 }
 
+.glyph-overlay--hold {
+  background: rgba(239, 228, 207, 0.97);
+  cursor: progress;
+}
+
+.glyph-overlay--hold.glyph-overlay--dark {
+  background: rgba(31, 31, 29, 0.97);
+}
+
+.glyph-overlay--hold::before {
+  content: "Zooming in for a clearer capture…";
+  position: absolute;
+  left: 50%;
+  top: 28px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #1a1a18;
+  color: #efe4cf;
+  font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.glyph-overlay--hold.glyph-overlay--dark::before {
+  background: #efe4cf;
+  color: #1a1a18;
+}
+
 .glyph-box {
   position: fixed;
   border: 1.5px solid #7FC4BB;
@@ -38,8 +67,12 @@
   max-width: 260px;
   overflow: visible;
 }
-.glyph-card--has-gfonts {
+.glyph-card--has-gfonts,
+.glyph-card--has-css {
   padding-right: 56px;
+}
+.glyph-card--has-gfonts.glyph-card--has-css {
+  padding-right: 78px;
 }
 
 .glyph-card--dark {
@@ -50,12 +83,15 @@
 }
 .glyph-card--dark .glyph-swatch { border-color: rgba(255, 255, 255, 0.2); }
 .glyph-card--dark .glyph-card-close,
-.glyph-card--dark .glyph-card-gfonts { color: #7c7c76; }
+.glyph-card--dark .glyph-card-gfonts,
+.glyph-card--dark .glyph-card-css { color: #7c7c76; }
 .glyph-card--dark .glyph-card-close:hover { background: rgba(255, 255, 255, 0.06); color: #ececea; }
 .glyph-card--dark .glyph-card-gfonts:hover,
-.glyph-card--dark .glyph-card-gfonts:focus-visible {
+.glyph-card--dark .glyph-card-gfonts:focus-visible,
+.glyph-card--dark .glyph-card-css:hover,
+.glyph-card--dark .glyph-card-css:focus-visible {
   background: #7FC4BB;
-  color: #1a1a18;
+  color: #1a1a18 !important;
 }
 .glyph-card--dark .glyph-prop:hover { background: rgba(127, 196, 187, 0.16); }
 .glyph-card--dark .glyph-card-copy {
@@ -80,47 +116,84 @@
   vertical-align: -1px;
 }
 
-.glyph-card-close {
+.glyph-card-tools {
   position: absolute;
-  top: 50%;
+  top: 0;
   right: 6px;
-  width: 20px;
-  height: 20px;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  color: #9a9a94;
-  font-size: 15px;
-  cursor: pointer;
-  border-radius: 4px;
-}
-.glyph-card-close:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #1a1a18;
-}
-
-.glyph-card-gfonts {
-  position: absolute;
-  top: 50%;
-  right: 28px;
-  width: 20px;
-  height: 20px;
-  transform: translateY(-50%);
+  bottom: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
+  gap: 2px;
+}
+.glyph-card-tools > .glyph-card-close,
+.glyph-card-tools > .glyph-card-gfonts,
+.glyph-card-tools > .glyph-card-css {
+  all: unset;
+  box-sizing: border-box !important;
+  position: static !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-items: center;
   justify-content: center;
+  flex: 0 0 20px;
   border-radius: 4px;
   color: #9a9a94;
-  text-decoration: none;
   cursor: pointer;
+  line-height: 1;
+  overflow: visible !important;
+}
+.glyph-card-tools > .glyph-card-css { order: 1; }
+.glyph-card-tools > .glyph-card-gfonts { order: 2; text-decoration: none; }
+.glyph-card-tools > .glyph-card-gfonts--none {
+  cursor: default;
+  pointer-events: none;
+}
+.glyph-card-tools > .glyph-card-close { order: 3; font-size: 15px; }
+.glyph-card--dark .glyph-card-tools > .glyph-card-close,
+.glyph-card--dark .glyph-card-tools > .glyph-card-gfonts,
+.glyph-card--dark .glyph-card-tools > .glyph-card-css { color: #7c7c76 !important; }
+.glyph-card-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1a1a18 !important;
 }
 .glyph-card-gfonts:hover,
-.glyph-card-gfonts:focus-visible {
+.glyph-card-gfonts:focus-visible,
+.glyph-card-css:hover,
+.glyph-card-css:focus-visible {
   background: rgba(127, 196, 187, 0.28);
+  color: #1a1a18 !important;
+}
+.glyph-card-gfonts:focus-visible,
+.glyph-card-css:focus-visible { outline: 2px solid #7FC4BB; outline-offset: 1px; }
+.glyph-card-gfonts svg,
+.glyph-card-css svg {
+  display: block !important;
+  width: 12px !important;
+  height: 12px !important;
+  flex: none;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+}
+.glyph-card-css--done,
+.glyph-card-css--done:hover,
+.glyph-card-css--done:focus-visible,
+.glyph-card--dark .glyph-card-css--done,
+.glyph-card--dark .glyph-card-css--done:hover,
+.glyph-card--dark .glyph-card-css--done:focus-visible {
+  background: #7FC4BB;
   color: #1a1a18;
 }
-.glyph-card-gfonts:focus-visible { outline: 2px solid #7FC4BB; outline-offset: 1px; }
-.glyph-card-gfonts svg { display: block; }
 
 .glyph-prop {
   position: relative;
@@ -239,6 +312,49 @@ html.glyph-hl-mode .glyph-card * {
 html.glyph-hl-mode .glyph-prop,
 html.glyph-hl-mode .glyph-card-copy,
 html.glyph-hl-mode .glyph-card-close,
-html.glyph-hl-mode .glyph-card-gfonts {
+html.glyph-hl-mode .glyph-card-gfonts,
+html.glyph-hl-mode .glyph-card-css {
   cursor: pointer !important;
+}
+html.glyph-img-mode,
+html.glyph-img-mode * {
+  cursor: pointer !important;
+}
+html.glyph-img-mode .glyph-card,
+html.glyph-img-mode .glyph-card * {
+  cursor: default !important;
+}
+html.glyph-img-mode .glyph-prop,
+html.glyph-img-mode .glyph-card-copy,
+html.glyph-img-mode .glyph-card-close,
+html.glyph-img-mode .glyph-card-gfonts,
+html.glyph-img-mode .glyph-card-css {
+  cursor: pointer !important;
+}
+html.glyph-img-mode .glyph-card-gfonts--none {
+  cursor: default !important;
+}
+
+.glyph-img-hint {
+  position: fixed;
+  z-index: 2147483647;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #1a1a18;
+  color: #efe4cf;
+  font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.glyph-img-hint--dark {
+  background: #efe4cf;
+  color: #1a1a18;
+}
+
+html.glyph-hl-mode .glyph-card-gfonts--none {
+  cursor: default !important;
 }

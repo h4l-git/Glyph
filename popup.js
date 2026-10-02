@@ -11,6 +11,8 @@ const errorNote = document.getElementById("error-note");
 // popup.html is shown either as Chrome's native popup or inside the
 // transparent in-page iframe created by panel.js.
 const inPanel = window.parent !== window;
+let holdPanelHeight = () => {};
+let releasePanelHeight = () => {};
 
 function closePopup() {
   if (inPanel) window.parent.postMessage({ type: "GLYPH_PANEL_CLOSE" }, "*");
@@ -31,6 +33,11 @@ if (inPanel) {
 
   const DEFAULT_WIDTH = 260;
   let naturalHeight = 0;
+  let menuHeight = 0;
+
+  const secondaryViewOpen = () =>
+    (settings && !settings.classList.contains("hidden")) ||
+    (history && !history.classList.contains("hidden"));
 
   const captureNaturalHeight = () => {
     naturalHeight = Math.max(1, Math.ceil(card.getBoundingClientRect().height));
@@ -49,13 +56,31 @@ if (inPanel) {
     root.style.setProperty("--ui-scale", String(scale));
   };
 
-  // While the panel is auto-sized, report the content height so the frame can
-  // follow it. Once the user has dragged the panel to a size, the card fills
-  // the frame instead ("fill" mode) and reporting stops.
+  // While the panel is auto-sized, report the menu height so the frame follows
+  // the main menu. Settings and history stay in that same window and scroll,
+  // instead of stretching the frame to their full content. Once the user has
+  // dragged the panel to a size, the card fills the frame ("fill" mode) and
+  // reporting stops.
   const sendSize = () => {
+    const secondary = secondaryViewOpen();
+    if (!root.hasAttribute("data-panel-fill") && !secondary && !root.hasAttribute("data-panel-scroll")) {
+      captureNaturalHeight();
+      menuHeight = naturalHeight;
+    }
     if (root.hasAttribute("data-panel-fill")) return;
-    captureNaturalHeight();
-    window.parent.postMessage({ type: "GLYPH_PANEL_SIZE", height: naturalHeight }, "*");
+    const height = secondary || root.hasAttribute("data-panel-scroll")
+      ? (menuHeight || naturalHeight)
+      : naturalHeight;
+    if (!height) return;
+    window.parent.postMessage({ type: "GLYPH_PANEL_SIZE", height }, "*");
+  };
+
+  holdPanelHeight = () => {
+    if (!root.hasAttribute("data-panel-fill")) root.setAttribute("data-panel-scroll", "");
+  };
+  releasePanelHeight = () => {
+    root.removeAttribute("data-panel-scroll");
+    sendSize();
   };
   new ResizeObserver(() => {
     sendSize();
@@ -77,8 +102,10 @@ if (inPanel) {
     if (!wantFill || !naturalHeight) {
       root.removeAttribute("data-panel-fill");
       root.style.setProperty("--ui-scale", "1");
-      captureNaturalHeight();
+      if (!secondaryViewOpen()) captureNaturalHeight();
     }
+    if (wantFill) root.removeAttribute("data-panel-scroll");
+    else if (secondaryViewOpen()) root.setAttribute("data-panel-scroll", "");
     root.toggleAttribute("data-panel-fill", wantFill);
     updateUiScale();
     sendSize();
@@ -164,32 +191,155 @@ async function injectAndStart(mode) {
   }
 }
 
+const snipTitle = document.getElementById("snip-title");
+const snipSub = document.getElementById("snip-sub");
+const snipHit = document.getElementById("btn-snip");
+const snipItem = document.querySelector(".snip-item");
+const imageTitle = document.getElementById("image-title");
+const imageSub = document.getElementById("image-sub");
+const imageHit = document.getElementById("btn-snip-image");
+let snipLimited = false;
+let snipResetTimer = 0;
+let snipResetAt = 0;
+
+function nextWfiReset(now = Date.now()) {
+  const date = new Date(now);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+}
+
+function formatSnipReset(resetAt, now = Date.now()) {
+  const end = Number(resetAt) || nextWfiReset(now);
+  const minutes = Math.max(1, Math.ceil(Math.max(0, end - now) / 60000));
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours && mins) return `Resets in ${hours}h ${mins}m`;
+  if (hours) return `Resets in ${hours}h`;
+  return `Resets in ${mins}m`;
+}
+
+function stopSnipResetTimer() {
+  if (!snipResetTimer) return;
+  clearInterval(snipResetTimer);
+  snipResetTimer = 0;
+}
+
+function paintSnipLimit() {
+  if (!snipLimited || snipResetAt <= Date.now()) {
+    applySnipQuota(null);
+    return;
+  }
+  const reset = formatSnipReset(snipResetAt);
+  if (snipSub) snipSub.textContent = reset;
+  if (imageSub) imageSub.textContent = reset;
+  if (snipHit) snipHit.setAttribute("aria-label", `Snip Limit Reached. ${reset}`);
+  if (imageHit) imageHit.setAttribute("aria-label", `Snip Limit Reached. ${reset}`);
+}
+
+function applySnipQuota(status) {
+  const limited = !!(status && status.limited && status.resetAt > Date.now());
+  snipLimited = limited;
+  snipResetAt = limited ? status.resetAt : 0;
+  stopSnipResetTimer();
+  if (snipItem) snipItem.classList.toggle("snip-limited", limited);
+  if (snipHit) snipHit.disabled = limited;
+  if (imageHit) imageHit.disabled = limited;
+  if (!limited) {
+    if (snipTitle) snipTitle.textContent = "Snip tool";
+    if (snipSub) snipSub.textContent = "Capture a region to identify";
+    if (snipHit) snipHit.setAttribute("aria-label", "Snip tool. Capture a region to identify");
+    if (imageTitle) imageTitle.textContent = "Image Selector";
+    if (imageSub) imageSub.textContent = "Select a picture to identify";
+    if (imageHit) imageHit.setAttribute("aria-label", "Image Selector. Select a picture to identify");
+    return;
+  }
+  if (snipTitle) snipTitle.textContent = "Snip Limit Reached";
+  paintSnipLimit();
+  snipResetTimer = setInterval(paintSnipLimit, 1000);
+}
+
 document.querySelector(".snip-item").addEventListener("click", (event) => {
-  if (event.target.closest(".ai-picker")) return;
+  if (event.target.closest(".ai-picker, .feature-info")) return;
+  if (snipLimited) return;
   injectAndStart("snip");
 });
 
+document.getElementById("btn-snip-image").addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (snipLimited) return;
+  // Reading a cross-origin picture needs host access. The prompt is tied to this click.
+  // Declining still starts the tool for files the page itself allows us to read.
+  try {
+    await chrome.permissions.request({ origins: SELECTION_ORIGINS });
+  } catch (err) {
+    // The picker still works for same-origin and CORS images.
+  }
+  injectAndStart("image");
+});
+
+chrome.runtime.sendMessage({ type: "GLYPH_SNIP_QUOTA" }, (status) => {
+  if (chrome.runtime.lastError) return;
+  applySnipQuota(status);
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.wfiSnipUsage) return;
+  chrome.runtime.sendMessage({ type: "GLYPH_SNIP_QUOTA" }, (status) => {
+    if (chrome.runtime.lastError) return;
+    applySnipQuota(status);
+  });
+});
+
 const SNIP_MODELS = [
+  { id: "whatfontis", label: "WhatFontIs" },
   { id: "claude-haiku-4-5", label: "Haiku 4.5" },
   { id: "claude-sonnet-5", label: "Sonnet 5" },
   { id: "claude-opus-5-5", label: "Opus 5.5" },
   { id: "claude-fable-5-1", label: "Fable 5.1" },
 ];
-const DEFAULT_SNIP_MODEL = "claude-sonnet-5";
+const DEFAULT_SNIP_MODEL = "whatfontis";
+const CLAUDE_KEY_HINT = "Add an Anthropic API key in Settings";
 const aiPicker = document.getElementById("ai-picker");
 const aiChip = document.getElementById("btn-ai-model");
 const aiMenu = document.getElementById("ai-model-menu");
+const aiKeyBtn = document.getElementById("btn-ai-key");
+let hasAnthropicKey = false;
+
+function isClaudeModel(id) {
+  return typeof id === "string" && id.startsWith("claude-");
+}
 
 function snipModelLabel(id) {
-  return SNIP_MODELS.find((model) => model.id === id)?.label || "Sonnet 5";
+  return SNIP_MODELS.find((model) => model.id === id)?.label || "WhatFontIs";
+}
+
+function syncClaudeModelButtons() {
+  aiMenu.querySelectorAll(".ai-option").forEach((option) => {
+    const locked = isClaudeModel(option.dataset.model) && !hasAnthropicKey;
+    option.disabled = locked;
+    option.title = locked ? CLAUDE_KEY_HINT : "";
+  });
+  if (aiKeyBtn) aiKeyBtn.classList.toggle("hidden", hasAnthropicKey);
+}
+
+function aiMenuChoices() {
+  const choices = [...aiMenu.querySelectorAll(".ai-option:not(:disabled)")];
+  if (aiKeyBtn && !aiKeyBtn.classList.contains("hidden")) choices.push(aiKeyBtn);
+  return choices;
 }
 
 function applySnipModel(id) {
-  const next = SNIP_MODELS.some((model) => model.id === id) ? id : DEFAULT_SNIP_MODEL;
+  const requested = SNIP_MODELS.some((model) => model.id === id) ? id : DEFAULT_SNIP_MODEL;
+  const next = isClaudeModel(requested) && !hasAnthropicKey ? DEFAULT_SNIP_MODEL : requested;
+  const label = snipModelLabel(next);
   aiMenu.querySelectorAll(".ai-option").forEach((option) => {
     option.setAttribute("aria-selected", option.dataset.model === next ? "true" : "false");
   });
-  aiChip.title = `Fallback model when WhatFontIs can't separate the letters: ${snipModelLabel(next)}`;
+  const chipLabel = aiChip.querySelector(".ai-chip-label");
+  if (chipLabel) chipLabel.textContent = label;
+  aiChip.title = next === "whatfontis"
+    ? "WhatFontIs matches the letters against its catalog"
+    : `Fallback model when WhatFontIs can't separate the letters: ${label}`;
   return next;
 }
 
@@ -216,7 +366,8 @@ function setAiMenuOpen(open) {
     return;
   }
   placeAiMenu();
-  const selected = aiMenu.querySelector('.ai-option[aria-selected="true"]') || aiMenu.querySelector(".ai-option");
+  const selected = aiMenu.querySelector('.ai-option[aria-selected="true"]:not(:disabled)')
+    || aiMenu.querySelector(".ai-option:not(:disabled)");
   selected?.focus();
 }
 
@@ -249,7 +400,7 @@ aiChip.addEventListener("keydown", (event) => {
 });
 
 aiMenu.addEventListener("keydown", (event) => {
-  const options = [...aiMenu.querySelectorAll(".ai-option")];
+  const options = aiMenuChoices();
   const index = options.indexOf(document.activeElement);
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
@@ -264,8 +415,15 @@ aiMenu.addEventListener("keydown", (event) => {
   }
 });
 
+if (aiKeyBtn) {
+  aiKeyBtn.addEventListener("click", () => {
+    openSettings({ focusApiKey: true });
+  });
+}
+
 aiMenu.querySelectorAll(".ai-option").forEach((option) => {
   option.addEventListener("click", async () => {
+    if (option.disabled || (isClaudeModel(option.dataset.model) && !hasAnthropicKey)) return;
     const id = applySnipModel(option.dataset.model);
     closeAiMenu();
     aiChip.focus();
@@ -278,9 +436,25 @@ document.addEventListener("click", (event) => {
 });
 
 (async () => {
-  const { snipModel } = await chrome.storage.local.get("snipModel");
-  applySnipModel(snipModel);
+  const { snipModel, apiKey } = await chrome.storage.local.get(["snipModel", "apiKey"]);
+  hasAnthropicKey = Boolean(String(apiKey || "").trim());
+  syncClaudeModelButtons();
+  const applied = applySnipModel(snipModel);
+  if (isClaudeModel(snipModel) && applied !== snipModel) {
+    await chrome.storage.local.set({ snipModel: applied });
+  }
 })();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.apiKey) return;
+  hasAnthropicKey = Boolean(String(changes.apiKey.newValue || "").trim());
+  syncClaudeModelButtons();
+  if (hasAnthropicKey) return;
+  const selected = aiMenu.querySelector('.ai-option[aria-selected="true"]');
+  if (!selected || !isClaudeModel(selected.dataset.model)) return;
+  const applied = applySnipModel(DEFAULT_SNIP_MODEL);
+  chrome.storage.local.set({ snipModel: applied });
+});
 document.getElementById("btn-highlight").addEventListener("click", () => injectAndStart("highlight"));
 
 document.getElementById("btn-website").addEventListener("click", () => {
@@ -356,7 +530,8 @@ function makeHistoryProp(prop) {
 
 const HISTORY_KEY = "fontHistory";
 const SAVE_HISTORY_KEY = "saveFontHistory";
-const HISTORY_LIMIT = 10;
+const HISTORY_LIMIT = 20;
+const SAVED_LIMIT = 50;
 const SAVED_KEY = "savedFonts";
 const SOURCE_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7"/><path d="M21 3 11 13"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
@@ -370,6 +545,8 @@ const PREVIEW_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const COPY_IMAGE_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="13" height="13" rx="2"/><circle cx="7.2" cy="9" r="1.2"/><path d="m3.8 15.2 3.2-3.2 2.6 2.6"/><rect x="9" y="8" width="12" height="12" rx="2"/></svg>';
+const CSS_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/></svg>';
 const GENERIC_FONT_FAMILIES = new Set([
   "serif", "sans-serif", "monospace", "cursive", "fantasy",
   "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace", "ui-rounded",
@@ -383,6 +560,8 @@ const savedHeading = document.getElementById("saved-heading");
 const recentHeading = document.getElementById("recent-heading");
 const btnFoldSaved = document.getElementById("btn-fold-saved");
 const btnFoldRecent = document.getElementById("btn-fold-recent");
+const historySearch = document.getElementById("history-search");
+const historySearchClear = document.getElementById("history-search-clear");
 const FOLD_KEY = "historyFold";
 let historyEntries = [];
 let savedEntries = [];
@@ -510,6 +689,7 @@ function isSaved(id) {
 
 async function persistSaved() {
   if (!chrome?.storage?.local) return;
+  savedEntries = savedEntries.slice(0, SAVED_LIMIT);
   await chrome.storage.local.set({ [SAVED_KEY]: savedEntries });
 }
 
@@ -536,7 +716,7 @@ async function toggleSave(entry) {
   if (isSaved(entry.id)) {
     savedEntries = savedEntries.filter((item) => item.id !== entry.id);
   } else {
-    savedEntries = [{ ...entry }, ...savedEntries];
+    savedEntries = [{ ...entry }, ...savedEntries].slice(0, SAVED_LIMIT);
   }
   try {
     await persistSaved();
@@ -586,6 +766,9 @@ function makeHistoryCard(entry, options = {}) {
   });
   actions.appendChild(previewBtn);
 
+  const cssText = cssFromEntry(entry);
+  if (cssText) actions.appendChild(makeCopyCssButton(cssText));
+
   if (options.allowDelete) {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -628,14 +811,52 @@ function makeHistoryCard(entry, options = {}) {
   return card;
 }
 
-function applyFoldState() {
-  savedList.classList.toggle("hidden", foldState.saved);
-  historyList.classList.toggle("hidden", foldState.recent);
+function historySearchQuery() {
+  return historySearch ? historySearch.value.trim() : "";
+}
+
+function entrySearchText(entry) {
+  const parts = [];
+  (entry?.properties || []).forEach((prop) => {
+    if (typeof prop === "string") parts.push(prop);
+    else {
+      if (prop.value) parts.push(prop.value);
+      if (prop.copy) parts.push(prop.copy);
+    }
+  });
+  (entry?.styles || []).forEach((style) => {
+    if (style.title) parts.push(style.title);
+    if (style.letter) parts.push(style.letter);
+    if (style.kind) parts.push(style.kind);
+  });
+  if (entry?.pageTitle) parts.push(entry.pageTitle);
+  if (entry?.pageUrl) parts.push(pageLinkLabel(entry.pageUrl));
+  if (entry?.sampleText) parts.push(entry.sampleText);
+  if (entry?.css) parts.push(entry.css);
+  if (entry?.swatchColor) parts.push(entry.swatchColor);
+  return parts.join(" ").toLowerCase();
+}
+
+function filterHistoryEntries(entries) {
+  const query = historySearchQuery().toLowerCase();
+  if (!query) return entries;
+  return entries.filter((entry) => entrySearchText(entry).includes(query));
+}
+
+function historyCountLabel(shown, total) {
+  return historySearchQuery() && shown !== total ? `${shown} of ${total}` : String(shown);
+}
+
+function applyFoldState(shownSaved = savedEntries.length, shownRecent = Math.min(historyEntries.length, HISTORY_LIMIT)) {
+  const searching = !!historySearchQuery();
+  savedList.classList.toggle("hidden", !searching && foldState.saved);
+  historyList.classList.toggle("hidden", !searching && foldState.recent);
   if (savedHeading) {
-    savedHeading.textContent = `Saved fonts (${savedEntries.length})`;
+    savedHeading.textContent = `Saved fonts (${historyCountLabel(shownSaved, savedEntries.length)})`;
   }
   if (recentHeading) {
-    recentHeading.textContent = `Recent fonts (${Math.min(historyEntries.length, HISTORY_LIMIT)})`;
+    const recentTotal = Math.min(historyEntries.length, HISTORY_LIMIT);
+    recentHeading.textContent = `Recent fonts (${historyCountLabel(shownRecent, recentTotal)})`;
   }
   const setFoldBtn = (btn, collapsed, label) => {
     if (!btn) return;
@@ -644,8 +865,8 @@ function applyFoldState() {
     btn.title = `${action} ${label}`;
     btn.setAttribute("aria-label", `${action} ${label}`);
   };
-  setFoldBtn(btnFoldSaved, foldState.saved, "saved fonts");
-  setFoldBtn(btnFoldRecent, foldState.recent, "recent fonts");
+  setFoldBtn(btnFoldSaved, searching ? false : foldState.saved, "saved fonts");
+  setFoldBtn(btnFoldRecent, searching ? false : foldState.recent, "recent fonts");
 }
 
 async function persistFoldState() {
@@ -654,9 +875,9 @@ async function persistFoldState() {
 }
 
 async function toggleFold(section) {
+  if (historySearchQuery()) return;
   foldState[section] = !foldState[section];
-  applyFoldState();
-  closePreview();
+  renderHistoryPage();
   try {
     await persistFoldState();
   } catch (err) {
@@ -668,7 +889,91 @@ function syncHistoryActionPadding(card) {
   const actions = card.querySelector(".history-actions");
   const n = actions ? actions.querySelectorAll(":scope > .history-action").length : 0;
   card.classList.toggle("history-card--actions-2", n === 2);
-  card.classList.toggle("history-card--actions-3", n >= 3);
+  card.classList.toggle("history-card--actions-3", n === 3);
+  card.classList.toggle("history-card--actions-4", n >= 4);
+}
+
+function historyPropText(prop) {
+  return String(typeof prop === "string" ? prop : (prop && prop.value) || "").trim();
+}
+
+function explicitFontWeight(entry) {
+  const props = entry?.properties || [];
+  for (let i = 1; i < props.length; i++) {
+    const v = historyPropText(props[i]).toLowerCase();
+    if (v === "bold" || v === "bolder") return "700";
+    if (v === "normal") return "400";
+    if (v === "lighter") return "lighter";
+    if (/^[1-9]00$/.test(v)) return v;
+  }
+  if ((entry?.styles || []).some((s) => s.kind === "bold")) return "700";
+  return "";
+}
+
+function explicitFontSize(entry) {
+  const props = entry?.properties || [];
+  for (let i = 1; i < props.length; i++) {
+    const v = historyPropText(props[i]);
+    if (/^-?[\d.]+px$/i.test(v)) return v;
+  }
+  return "";
+}
+
+function explicitColor(entry) {
+  const props = entry?.properties || [];
+  for (let i = 1; i < props.length; i++) {
+    const v = historyPropText(props[i]);
+    const hex = v.match(/^(#[0-9a-f]{3,8})\b/i);
+    if (hex) return hex[1];
+    if (/^rgba?\(/i.test(v)) return v;
+  }
+  const swatch = String(entry?.swatchColor || "").trim();
+  if (/^#|^rgba?\(/i.test(swatch)) return swatch;
+  return "";
+}
+
+function cssFromEntry(entry) {
+  const stored = String(entry?.css || "").trim();
+  if (stored) return stored;
+  const family = fontNameFromEntry(entry);
+  if (!family || family.toLowerCase() === "unknown") return "";
+  const lines = [`font-family: ${cssQuotedFamily(family)};`];
+  const size = explicitFontSize(entry);
+  const weight = explicitFontWeight(entry);
+  const color = explicitColor(entry);
+  const styles = entry?.styles || [];
+  if (size) lines.push(`font-size: ${size};`);
+  if (weight) lines.push(`font-weight: ${weight};`);
+  if (styles.some((s) => s.kind === "italic")) lines.push("font-style: italic;");
+  if (color) lines.push(`color: ${color};`);
+  if (styles.some((s) => s.kind === "underline")) lines.push("text-decoration: underline;");
+  return lines.join("\n");
+}
+
+function makeCopyCssButton(cssText) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "history-action history-css";
+  btn.title = "Copy CSS";
+  btn.setAttribute("aria-label", "Copy CSS");
+  btn.innerHTML = CSS_ICON;
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!(await copyText(cssText))) return;
+    btn.innerHTML = CHECK_ICON;
+    btn.classList.add("history-action--done");
+    btn.title = "Copied";
+    btn.setAttribute("aria-label", "Copied");
+    clearTimeout(btn._glyphCopyTimer);
+    btn._glyphCopyTimer = setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.innerHTML = CSS_ICON;
+      btn.classList.remove("history-action--done");
+      btn.title = "Copy CSS";
+      btn.setAttribute("aria-label", "Copy CSS");
+    }, 1200);
+  });
+  return btn;
 }
 
 function clearCopyImageButtons() {
@@ -1101,16 +1406,22 @@ function renderEntryList(list, entries, emptyText, options) {
 
 function renderHistoryPage() {
   closePreview();
-  renderEntryList(savedList, savedEntries, "Save a font from Recent to keep it here.");
-  renderEntryList(
-    historyList,
-    historyEntries.slice(0, HISTORY_LIMIT),
-    saveHistory
+  const query = historySearchQuery();
+  const recent = historyEntries.slice(0, HISTORY_LIMIT);
+  const shownSaved = filterHistoryEntries(savedEntries);
+  const shownRecent = filterHistoryEntries(recent);
+  const savedEmpty = query
+    ? `No saved fonts match “${query}”.`
+    : "Save a font from Recent to keep it here.";
+  const recentEmpty = query
+    ? `No recent fonts match “${query}”.`
+    : saveHistory
       ? "Fonts you identify will show up here."
-      : "Font history is turned off in Settings.",
-    { allowDelete: true }
-  );
-  applyFoldState();
+      : "Font history is turned off in Settings.";
+  renderEntryList(savedList, shownSaved, savedEmpty);
+  renderEntryList(historyList, shownRecent, recentEmpty, { allowDelete: true });
+  if (historySearchClear) historySearchClear.classList.toggle("hidden", !query);
+  applyFoldState(shownSaved.length, shownRecent.length);
 }
 
 async function loadHistoryPage() {
@@ -1120,8 +1431,14 @@ async function loadHistoryPage() {
   try {
     const data = await chrome.storage.local.get([HISTORY_KEY, SAVED_KEY, FOLD_KEY, SAVE_HISTORY_KEY]);
     saveHistory = data[SAVE_HISTORY_KEY] !== false;
-    if (Array.isArray(data[HISTORY_KEY])) historyEntries = data[HISTORY_KEY];
-    if (Array.isArray(data[SAVED_KEY])) savedEntries = data[SAVED_KEY];
+    if (Array.isArray(data[HISTORY_KEY])) {
+      historyEntries = data[HISTORY_KEY].slice(0, HISTORY_LIMIT);
+      if (data[HISTORY_KEY].length > HISTORY_LIMIT) persistHistory();
+    }
+    if (Array.isArray(data[SAVED_KEY])) {
+      savedEntries = data[SAVED_KEY].slice(0, SAVED_LIMIT);
+      if (data[SAVED_KEY].length > SAVED_LIMIT) persistSaved();
+    }
     if (data[FOLD_KEY] && typeof data[FOLD_KEY] === "object") {
       foldState = {
         saved: !!data[FOLD_KEY].saved,
@@ -1136,9 +1453,11 @@ async function loadHistoryPage() {
 }
 
 document.getElementById("btn-history").addEventListener("click", async () => {
+  holdPanelHeight();
   menu.classList.add("hidden");
   settings.classList.add("hidden");
   history.classList.remove("hidden");
+  history.scrollTop = 0;
   document.querySelector(".popup").scrollTop = 0;
   await loadHistoryPage();
 });
@@ -1146,12 +1465,26 @@ document.getElementById("btn-history").addEventListener("click", async () => {
 if (btnFoldSaved) btnFoldSaved.addEventListener("click", () => toggleFold("saved"));
 if (btnFoldRecent) btnFoldRecent.addEventListener("click", () => toggleFold("recent"));
 
+if (historySearch) {
+  historySearch.addEventListener("input", () => renderHistoryPage());
+  historySearch.addEventListener("search", () => renderHistoryPage());
+}
+if (historySearchClear) {
+  historySearchClear.addEventListener("click", () => {
+    if (!historySearch) return;
+    historySearch.value = "";
+    historySearch.focus();
+    renderHistoryPage();
+  });
+}
+
 document.getElementById("btn-history-back").addEventListener("click", () => {
   closePreview();
   history.classList.add("hidden");
   settings.classList.add("hidden");
   menu.classList.remove("hidden");
   document.querySelector(".popup").scrollTop = 0;
+  releasePanelHeight();
 });
 
 const saveHistoryToggle = document.getElementById("save-font-history");
@@ -1167,6 +1500,21 @@ if (saveHistoryToggle) {
     const enabled = saveHistoryToggle.checked;
     saveHistory = enabled;
     chrome.storage.local.set({ [SAVE_HISTORY_KEY]: enabled });
+  });
+}
+
+const SHARP_SNIP_KEY = "sharpSnip";
+const sharpSnipToggle = document.getElementById("sharp-snip");
+
+async function syncSharpSnipToggle() {
+  if (!sharpSnipToggle || !chrome?.storage?.local) return;
+  const data = await chrome.storage.local.get(SHARP_SNIP_KEY);
+  sharpSnipToggle.checked = !!data[SHARP_SNIP_KEY];
+}
+
+if (sharpSnipToggle) {
+  sharpSnipToggle.addEventListener("change", () => {
+    chrome.storage.local.set({ [SHARP_SNIP_KEY]: sharpSnipToggle.checked });
   });
 }
 
@@ -1215,16 +1563,20 @@ if (selectionCardToggle) {
   });
 }
 
-document.getElementById("btn-settings").addEventListener("click", async () => {
+async function openSettings(options = {}) {
+  closeAiMenu();
   closePreview();
+  holdPanelHeight();
   menu.classList.add("hidden");
   history.classList.add("hidden");
   settings.classList.remove("hidden");
+  settings.scrollTop = 0;
   document.querySelector(".popup").scrollTop = 0;
   const { apiKey } = await chrome.storage.local.get("apiKey");
   if (apiKeyInput) apiKeyInput.value = apiKey || "";
   syncApiKeyCopy();
   await syncSaveHistoryToggle();
+  await syncSharpSnipToggle();
   await syncSelectionCardToggle();
   await syncPanelCorner();
   const commands = await chrome.commands.getAll();
@@ -1234,6 +1586,11 @@ document.getElementById("btn-settings").addEventListener("click", async () => {
     snip?.shortcut || "Not set";
   document.getElementById("highlight-shortcut-display").textContent =
     highlight?.shortcut || "Not set";
+  if (options.focusApiKey && apiKeyInput) apiKeyInput.focus();
+}
+
+document.getElementById("btn-settings").addEventListener("click", () => {
+  openSettings();
 });
 
 function openShortcutSettings() {
@@ -1287,6 +1644,7 @@ document.getElementById("btn-back").addEventListener("click", () => {
   menu.classList.remove("hidden");
   saveNote.classList.add("hidden");
   document.querySelector(".popup").scrollTop = 0;
+  releasePanelHeight();
 });
 
 function bindKeyCopy(input, button, syncName) {
@@ -1320,9 +1678,17 @@ function bindKeyCopy(input, button, syncName) {
 const syncApiKeyCopy = bindKeyCopy(apiKeyInput, btnCopyApiKey, "Anthropic API key");
 
 document.getElementById("btn-save").addEventListener("click", async () => {
-  await chrome.storage.local.set({
-    apiKey: apiKeyInput ? apiKeyInput.value.trim() : "",
-  });
+  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : "";
+  const payload = { apiKey };
+  hasAnthropicKey = Boolean(apiKey);
+  syncClaudeModelButtons();
+  if (!hasAnthropicKey) {
+    const selected = aiMenu.querySelector('.ai-option[aria-selected="true"]');
+    if (selected && isClaudeModel(selected.dataset.model)) {
+      payload.snipModel = applySnipModel(DEFAULT_SNIP_MODEL);
+    }
+  }
+  await chrome.storage.local.set(payload);
   syncApiKeyCopy();
   saveNote.classList.remove("hidden");
   setTimeout(() => saveNote.classList.add("hidden"), 1500);

@@ -41,6 +41,7 @@
   </header>
 
   <nav class="menu" id="menu-main">
+    <div class="feature-row">
     <div class="item snip-item">
       <button type="button" class="snip-hit" id="btn-snip" aria-label="Snip tool. Capture a region to identify"></button>
       <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -48,48 +49,89 @@
       </svg>
       <span class="item-title" aria-hidden="true">Snip tool</span>
       <span class="snip-badges">
+        <span class="ai-tag" title="Snip uses AI to identify the captured region">AI</span>
         <span class="ai-picker" id="ai-picker">
-          <button type="button" class="ai-chip" id="btn-ai-model" aria-haspopup="listbox" aria-expanded="false" aria-controls="ai-model-menu" title="Fallback model, used when WhatFontIs can't separate the letters">
-            AI
+          <button type="button" class="ai-chip" id="btn-ai-model" aria-haspopup="listbox" aria-expanded="false" aria-controls="ai-model-menu" title="WhatFontIs matches the letters against its catalog">
+            <span class="ai-chip-label">WhatFontIs</span>
             <svg class="ai-chevron" viewBox="0 0 12 12" width="8" height="8" aria-hidden="true"><path d="M2.5 4.5 6 8 9.5 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <span class="ai-menu hidden" id="ai-model-menu" role="listbox" aria-label="Claude model">
-            <button type="button" class="ai-option" role="option" data-model="claude-haiku-4-5" aria-selected="false">
+          <span class="ai-menu hidden" id="ai-model-menu" role="listbox" aria-label="Identification model">
+            <button type="button" class="ai-option" role="option" data-model="whatfontis" aria-selected="true">
               <span class="ai-option-mark" aria-hidden="true"></span>
-              <span class="ai-option-name">Haiku 4.5</span>
-              <span class="ai-option-hint">Fast</span>
+              <span class="ai-option-name">WhatFontIs</span>
+              <span class="ai-option-hint">Default</span>
             </button>
-            <button type="button" class="ai-option" role="option" data-model="claude-sonnet-5" aria-selected="true">
-              <span class="ai-option-mark" aria-hidden="true"></span>
-              <span class="ai-option-name">Sonnet 5</span>
-              <span class="ai-option-hint">Balanced</span>
-            </button>
-            <button type="button" class="ai-option" role="option" data-model="claude-opus-5-5" aria-selected="false">
-              <span class="ai-option-mark" aria-hidden="true"></span>
-              <span class="ai-option-name">Opus 5.5</span>
-              <span class="ai-option-hint">Stronger</span>
-            </button>
-            <button type="button" class="ai-option" role="option" data-model="claude-fable-5-1" aria-selected="false">
-              <span class="ai-option-mark" aria-hidden="true"></span>
-              <span class="ai-option-name">Fable 5.1</span>
-              <span class="ai-option-hint">Highest</span>
-            </button>
+            <span class="ai-menu-label" aria-hidden="true">Claude Models</span>
+            <span class="ai-claude-group">
+              <button type="button" class="ai-option" role="option" data-model="claude-haiku-4-5" aria-selected="false">
+                <span class="ai-option-mark" aria-hidden="true"></span>
+                <span class="ai-option-name">Haiku 4.5</span>
+                <span class="ai-option-hint">Fast</span>
+              </button>
+              <button type="button" class="ai-option" role="option" data-model="claude-sonnet-5" aria-selected="false">
+                <span class="ai-option-mark" aria-hidden="true"></span>
+                <span class="ai-option-name">Sonnet 5</span>
+                <span class="ai-option-hint">Balanced</span>
+              </button>
+              <button type="button" class="ai-option" role="option" data-model="claude-opus-5-5" aria-selected="false">
+                <span class="ai-option-mark" aria-hidden="true"></span>
+                <span class="ai-option-name">Opus 5.5</span>
+                <span class="ai-option-hint">Stronger</span>
+              </button>
+              <button type="button" class="ai-option" role="option" data-model="claude-fable-5-1" aria-selected="false">
+                <span class="ai-option-mark" aria-hidden="true"></span>
+                <span class="ai-option-name">Fable 5.1</span>
+                <span class="ai-option-hint">Highest</span>
+              </button>
+              <button type="button" class="ai-key-link hidden" title="Add an Anthropic API key in Settings">Add API key</button>
+            </span>
           </span>
         </span>
-        <span class="beta-tag" title="Snip is still in development">Beta</span>
       </span>
       <span class="item-sub" aria-hidden="true">Capture a region to identify</span>
     </div>
+    <button type="button" class="feature-info" aria-label="What Snip is best for" aria-describedby="tip-snip">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="1.15" fill="currentColor"/><path d="M8 7.15v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span class="feature-tip" id="tip-snip" role="tooltip">Best for one line of letters.</span>
+    </button>
+    </div>
 
-    <button class="item" id="btn-highlight">
+    <div class="feature-row">
+    <div class="item">
+      <button type="button" class="feature-hit" id="btn-snip-image" aria-label="Image Selector. Select a picture to identify"></button>
+      <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="m21 15-4.5-4.5L7 20"/>
+      </svg>
+      <span class="item-text">
+        <span class="item-title-row">
+          <span class="item-title" id="image-title">Image Selector</span>
+          <span class="ai-tag" title="Image Selector uses AI to identify the picture">AI</span>
+        </span>
+        <span class="item-sub" id="image-sub">Select a picture to identify</span>
+      </span>
+    </div>
+    <button type="button" class="feature-info" aria-label="What Image Selector is best for" aria-describedby="tip-image">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="1.15" fill="currentColor"/><path d="M8 7.15v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span class="feature-tip" id="tip-image" role="tooltip">Best for a sharp picture file.</span>
+    </button>
+    </div>
+
+    <div class="feature-row">
+    <div class="item">
+      <button type="button" class="feature-hit" id="btn-highlight" aria-label="Highlight text. Select text on the page"></button>
       <svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12.5 5.5 18.5 11.5 8 22H2v-6z"/><path d="M16 2l6 6"/>
       </svg>
       <span class="item-text">
-        <span class="item-title">Highlight tool</span>
+        <span class="item-title">Highlight text</span>
         <span class="item-sub">Select text on the page</span>
       </span>
+    </div>
+    <button type="button" class="feature-info" aria-label="What Highlight text is best for" aria-describedby="tip-highlight">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4.2" r="1.15" fill="currentColor"/><path d="M8 7.15v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <span class="feature-tip" id="tip-highlight" role="tooltip">Best for live text.</span>
     </button>
+    </div>
 
     <div class="divider" role="separator"></div>
 
@@ -136,7 +178,7 @@
         <svg class="api-key-copy-check" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.5 8.5 6.6 11.5 12.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
-    <p class="field-hint">Optional. Used only when WhatFontIs can't separate the letters. Stored on this device and sent to Anthropic with that crop.</p>
+    <p class="field-hint">Optional. Used when you pick a Claude model and WhatFontIs can't separate the letters. Stored on this device and sent to Anthropic with that crop.</p>
     <button type="button" class="field-link" id="btn-create-api-key">Create an API key on Anthropic</button>
     <div class="save-row">
       <button class="save" id="btn-save">Save</button>
@@ -163,6 +205,17 @@
       </span>
       <span class="switch">
         <input type="checkbox" id="save-font-history" role="switch" checked />
+        <span class="switch-ui" aria-hidden="true"></span>
+      </span>
+    </label>
+
+    <label class="toggle-row" for="sharp-snip">
+      <span class="toggle-copy">
+        <span class="field-label">Sharper snip</span>
+        <span class="field-hint">Zoom the page in on the text you select, capture it, then zoom back. WhatFontIs gets a clearer picture of the letters.</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="sharp-snip" role="switch" />
         <span class="switch-ui" aria-hidden="true"></span>
       </span>
     </label>
@@ -211,6 +264,13 @@
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       Back
     </button>
+    <div class="history-search">
+      <svg class="history-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" class="history-search-input" id="history-search" placeholder="Search fonts" aria-label="Search saved and recent fonts" autocomplete="off" spellcheck="false" />
+      <button type="button" class="history-search-clear hidden" id="history-search-clear" aria-label="Clear search" title="Clear search">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
+      </button>
+    </div>
     <button type="button" class="history-heading history-fold" id="btn-fold-saved" aria-controls="saved-list" aria-expanded="true" title="Minimise saved fonts" aria-label="Minimise saved fonts">
       <span class="field-label" id="saved-heading">Saved fonts (0)</span>
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>

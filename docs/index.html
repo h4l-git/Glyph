@@ -343,7 +343,7 @@ h2 {
 
 .split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 28px;
 }
 .tool-card {
@@ -403,6 +403,7 @@ footer .display { font-size: 15px; color: var(--ink); }
   .nav-links a:not(.btn) { display: none; }
   .footer-row { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .footer-links { justify-self: center; }
+  .split { grid-template-columns: 1fr; }
   .shot-grid { grid-template-columns: 1fr; }
   .shot-grid figure.is-open {
     width: 100vw;
@@ -572,7 +573,7 @@ html.is-loading { overflow: hidden; }
 <section class="how" id="how">
   <div class="how-inner">
     <p class="eyebrow">How it works</p>
-    <h2>Two tools. A few seconds.</h2>
+    <h2>Three tools. Then keep it.</h2>
     <div class="split" id="tools">
       <div class="tool-card">
         <div class="icon" aria-hidden="true">
@@ -581,7 +582,16 @@ html.is-loading { overflow: hidden; }
           </svg>
         </div>
         <h3>Snip tool</h3>
-        <p>For text trapped in images, screenshots, and posters. Drag a box around it - Glyph matches the letterforms against a font catalog and names the closest typeface.</p>
+        <p>For text trapped in images, screenshots, and posters. Drag a box around the letters. Glyph matches the letterforms against a font catalog and names the closest typeface.</p>
+      </div>
+      <div class="tool-card">
+        <div class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4F30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="m21 15-4.5-4.5L7 20"/>
+          </svg>
+        </div>
+        <h3>Image Selector</h3>
+        <p>For lettering already sitting in a picture. Click an image, a background, or a canvas. Glyph reads the picture file, preferring a larger version than the one drawn on the page, and names the typeface.</p>
       </div>
       <div class="tool-card">
         <div class="icon" aria-hidden="true">
@@ -591,6 +601,15 @@ html.is-loading { overflow: hidden; }
         </div>
         <h3>Highlight tool</h3>
         <p>For live text on any webpage. Point at a headline or paragraph and Glyph reads the exact family, weight, and size straight from the page.</p>
+      </div>
+      <div class="tool-card">
+        <div class="icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4F30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 1.8"/>
+          </svg>
+        </div>
+        <h3>Font history</h3>
+        <p>Every identification is kept in History: the twenty most recent, with a preview, copyable details, and a link back to the page. Save up to fifty fonts you want to keep, or turn saving off in Settings. Fonts you have already saved stay either way.</p>
       </div>
     </div>
   </div>
@@ -602,8 +621,8 @@ html.is-loading { overflow: hidden; }
     <h2>A few seconds, on any page.</h2>
     <p class="in-use-lead">Open Glyph, then point at live text or box lettering in a picture. The typeface shows up beside it.</p>
     <div class="demo-frame" id="demo-frame">
-      <video id="demo" controls playsinline muted loop preload="metadata" poster="shots/highlight.jpg" width="1280" height="720">
-        <source src="shots/glyph-demo.mp4" type="video/mp4">
+      <video id="demo" controls playsinline muted loop preload="metadata" poster="shots/highlight.jpg?v=1.0.0" width="1280" height="720">
+        <source src="shots/glyph-demo.mp4?v=1.0.0" type="video/mp4">
       </video>
       <button type="button" class="frame-toggle" id="demo-toggle" aria-expanded="false" aria-controls="demo" aria-label="Maximise video">
         <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
@@ -613,7 +632,7 @@ html.is-loading { overflow: hidden; }
     <div class="shot-grid">
       <figure>
         <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the menu screenshot">
-          <img src="shots/menu.jpg" width="1600" height="900" alt="The Glyph menu open in the corner of a webpage, with the pointer on Highlight tool.">
+          <img src="shots/menu.jpg?v=1.0.0" width="1600" height="900" alt="The Glyph menu open in the corner of a webpage, showing Snip, Image Selector, and Highlight text, with the pointer on Highlight text.">
           <span class="frame-icon" aria-hidden="true">
             <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
             <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
@@ -623,7 +642,7 @@ html.is-loading { overflow: hidden; }
       </figure>
       <figure>
         <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the highlight screenshot">
-          <img src="shots/highlight.jpg" width="1600" height="900" alt="Highlight tool outlining a headline, with a card reading Fraunces, bold, 52 pixels.">
+          <img src="shots/highlight.jpg?v=1.0.0" width="1600" height="900" alt="Highlight text outlining a headline, with a card reading Fraunces, bold, 52 pixels, and buttons to copy the CSS and open the font.">
           <span class="frame-icon" aria-hidden="true">
             <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
             <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>
@@ -633,7 +652,7 @@ html.is-loading { overflow: hidden; }
       </figure>
       <figure>
         <button type="button" class="shot-toggle" aria-expanded="false" aria-label="Maximise the snip screenshot">
-          <img src="shots/snip.jpg" width="1600" height="900" alt="Snip tool boxing the words Opening Night on a poster, with a card naming Playfair Display.">
+          <img src="shots/snip.jpg?v=1.0.0" width="1600" height="900" alt="Snip tool boxing the words Opening Night on a poster, with a card naming Playfair Display, marked free, plus a similar face.">
           <span class="frame-icon" aria-hidden="true">
             <svg class="icon-max" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
             <svg class="icon-min" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg>

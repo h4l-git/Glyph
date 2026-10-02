@@ -36,6 +36,7 @@
     let wrap = null;
     let iframe = null;
     let grip = null;
+    let fit = null;
     let corner = DEFAULT_CORNER;
     let manualSize = null; // { w, h } once the user has resized, else null
     let pendingOpen = false;
@@ -55,7 +56,16 @@
       wrap.style.width = `${w}px`;
       iframe.style.width = `${w}px`;
       if (manualSize) iframe.style.height = `${manualSize.h}px`;
+      wrap.classList.toggle("sized", !!manualSize);
       postToFrame({ type: "GLYPH_PANEL_MODE", fill: !!manualSize });
+    };
+
+    const resetSize = () => {
+      if (!manualSize) return;
+      manualSize = null;
+      chrome.storage.local.remove(STORAGE_KEY);
+      if (iframe) iframe.style.height = "0px";
+      applySize();
     };
 
     const onMessage = (event) => {
@@ -63,7 +73,10 @@
       const data = event.data || {};
       if (data.type === "GLYPH_PANEL_SIZE" && typeof data.height === "number") {
         // Content-driven height only while the user hasn't chosen a size.
-        if (!manualSize) iframe.style.height = `${Math.max(0, Math.ceil(data.height))}px`;
+        if (!manualSize) {
+          const maxH = Math.max(MIN_HEIGHT, window.innerHeight - MARGIN * 2);
+          iframe.style.height = `${Math.min(maxH, Math.max(0, Math.ceil(data.height)))}px`;
+        }
       } else if (data.type === "GLYPH_PANEL_READY") {
         applyCorner();
         applySize();
@@ -83,9 +96,14 @@
       host.style.bottom = spec.top ? "auto" : `${MARGIN}px`;
       host.style.left = spec.left ? `${MARGIN}px` : "auto";
       host.style.right = spec.left ? "auto" : `${MARGIN}px`;
+      const place = `${spec.top ? "b" : "t"}${spec.left ? "r" : "l"}`;
       if (grip) {
         grip.classList.remove("grip-tl", "grip-tr", "grip-bl", "grip-br");
-        grip.classList.add(`grip-${spec.top ? "b" : "t"}${spec.left ? "r" : "l"}`);
+        grip.classList.add(`grip-${place}`);
+      }
+      if (fit) {
+        fit.classList.remove("fit-tl", "fit-tr", "fit-bl", "fit-br");
+        fit.classList.add(`fit-${place}`);
       }
       postToFrame({ type: "GLYPH_PANEL_CORNER", corner: name });
     };
@@ -157,13 +175,28 @@
 
       grip.addEventListener("dblclick", (event) => {
         event.preventDefault();
-        manualSize = null;
-        chrome.storage.local.remove(STORAGE_KEY);
-        iframe.style.height = "0px";
-        applySize(); // the frame replies with its content height
+        resetSize();
       });
 
       return grip;
+    }
+
+    function buildFit() {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "fit";
+      button.title = "Fit the window so every button is visible";
+      button.setAttribute("aria-label", "Fit the window so every button is visible");
+      button.innerHTML =
+        '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">' +
+        '<path d="M4.5 1.5V4.5H1.5M7.5 1.5V4.5H10.5M4.5 10.5V7.5H1.5M7.5 10.5V7.5H10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' +
+        "</svg>";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        resetSize();
+      });
+      return button;
     }
 
     async function open() {
@@ -234,6 +267,26 @@
         .grip-tr svg { transform: scaleY(-1); }
         .grip:hover, .resizing .grip { color: rgba(128, 128, 128, 0.95); }
         .grip:focus-visible { outline: 2px solid #7FC4BB; outline-offset: -2px; border-radius: 4px; }
+        .fit {
+          position: absolute;
+          width: 22px;
+          height: 22px;
+          margin: 0;
+          border: 0;
+          background: transparent;
+          color: rgba(128, 128, 128, 0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 0;
+        }
+        .fit-bl { left: 22px; bottom: 0; }
+        .fit-br { right: 22px; bottom: 0; }
+        .fit-tl { left: 22px; top: 0; }
+        .fit-tr { right: 22px; top: 0; }
+        .fit:hover { color: rgba(128, 128, 128, 0.95); }
+        .fit:focus-visible { outline: 2px solid #7FC4BB; outline-offset: -2px; border-radius: 4px; }
       `;
 
       wrap = document.createElement("div");
@@ -246,8 +299,10 @@
       iframe.title = "Glyph";
 
       grip = buildGrip();
+      fit = buildFit();
       wrap.appendChild(iframe);
       wrap.appendChild(grip);
+      wrap.appendChild(fit);
       shadow.appendChild(style);
       shadow.appendChild(wrap);
       applyCorner();
@@ -271,6 +326,7 @@
       wrap = null;
       iframe = null;
       grip = null;
+      fit = null;
     }
 
     window.__glyphPanel = {
